@@ -10,7 +10,7 @@ local K = {
   HOME = 6647396, END = 1752132965, PAGE_UP = 1885828464, PAGE_DOWN = 1885824110,
   F2 = 26162, F5 = 26165, F12 = 6697266, ESCAPE = 27, DELETE = 6579564,
   -- As Control+letter arrives:
-  CTRL_N = 14, A = 1, F = 6, G = 7, R = 18, V = 22, X = 24,
+  CTRL_N = 14, A = 1, F = 6, G = 7, R = 18, T = 20, V = 22, X = 24,
   SPACE = 32,
 }
 local CTRL, SHIFT = 4, 8
@@ -55,11 +55,17 @@ local keys = {
   { K.LEFT }, { K.END, CTRL }, { K.RIGHT }, -- frequency, into it
   { K.V, CTRL },                           -- 2 pasted into frequency, for session 2
   { K.LEFT },
+  -- A path: "both/inner/deep" reuses both and nests two new branches.
+  { K.CTRL_N, CTRL },
+  { K.RIGHT }, { K.RIGHT }, { K.RIGHT },   -- both, inner, deep: empty
+  { K.T, CTRL },                           -- back to the Phaser's level, on both
+  { K.T, CTRL },                           -- already there
+  { K.CTRL_N, CTRL },                      -- "both" again: already exists
   { K.F12 }, { K.PAGE_DOWN }, { K.ESCAPE }, -- change a setting
   { K.F5 },                                -- refresh keeps the place
   { K.ESCAPE },                            -- quit
 }
-local answers = { "frequency", "Q", "Q factor", "dep", "Mix depth", "", "both" }
+local answers = { "frequency", "Q", "Q factor", "dep", "Mix depth", "", "both", "both/inner/deep", "Both" }
 
 -- Session 2: the second track's Phaser is a new instance of the same plugin.
 local keys_session2 = {

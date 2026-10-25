@@ -31,7 +31,7 @@ local KEY = {
   PAGE_UP = 1885828464, PAGE_DOWN = 1885824110,
   ENTER = 13, SPACE = 32, F2 = 26162, F5 = 26165, F12 = 6697266, ESCAPE = 27,
   DELETE = 6579564,
-  CTRL_A = 1, CTRL_C = 3, CTRL_F = 6, CTRL_G = 7, CTRL_N = 14, CTRL_R = 18, CTRL_V = 22, CTRL_X = 24,
+  CTRL_A = 1, CTRL_C = 3, CTRL_F = 6, CTRL_G = 7, CTRL_N = 14, CTRL_R = 18, CTRL_T = 20, CTRL_V = 22, CTRL_X = 24,
 }
 
 -- Settings persist in REAPER's ExtState, so they survive script updates.
@@ -254,18 +254,25 @@ local function prompt_text(title, caption, default)
   return text:match("^%s*(.-)%s*$")
 end
 
--- Control+N: a new branch at the current level, after the focused item.
+-- Control+N: a new branch at the current level. A path such as "freq/min"
+-- also creates the branches nested inside it, reusing any that exist.
+-- The focus goes to the top branch.
 local function create_branch()
   if in_settings() or not organizer.can_create_branch(cursor) then
     speak("Not available here")
     return
   end
-  local name = prompt_text("New branch", "Branch name:")
-  if not name or name == "" then
+  local path = prompt_text("New branch", "Branch name, or a path such as freq/min:")
+  local top, created
+  if path then top, created = organizer.create_path(cursor, path) end
+  if not top then
     speak("Cancelled")
     return
   end
-  organizer.create_branch(cursor, name)
+  if created == 0 then
+    speak("Already exists. " .. describe_focused(true))
+    return
+  end
   save_layout()
   speak(describe_focused(true))
 end
@@ -517,6 +524,25 @@ local function value_to_extreme(to_max)
   speak(value_of(node))
 end
 
+-- Control+T: back to the effect's own level, landing on the top branch
+-- that holds the focus, as pressing Left repeatedly would.
+local function to_effect_level()
+  local fx_node = not in_settings() and tree.enclosing(cursor.container, "fx")
+  if not fx_node then
+    speak("Not available here")
+    return
+  end
+  if cursor.container == fx_node then
+    speak("Already at the top. " .. describe_focused(true))
+    return
+  end
+  local node = tree.focused(cursor) or cursor.container
+  while node.parent ~= fx_node do node = node.parent end
+  selection.clear(sel)
+  tree.focus_node(cursor, node)
+  speak_focused(false)
+end
+
 -- Right: entering an effect whose default branch is filtered says so, so
 -- the hidden parameters aren't taken for missing.
 local function enter()
@@ -624,6 +650,8 @@ local function handle_key(code, cap)
     sort()
   elseif ctrl_only and code == KEY.CTRL_R then
     revert()
+  elseif ctrl_only and code == KEY.CTRL_T then
+    to_effect_level()
   elseif code == KEY.DELETE and plain then
     delete()
   elseif not plain then

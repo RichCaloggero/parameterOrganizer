@@ -139,6 +139,54 @@ function M.create_branch(cursor, name)
   return tree.insert_after_focus(cursor, tree.new_node("branch", name))
 end
 
+-- The branch among node's children with this name, ignoring case.
+local function find_branch(node, name)
+  for _, child in ipairs(node.children) do
+    if child.kind == "branch" and child.label:lower() == name:lower() then return child end
+  end
+  return nil
+end
+
+-- Control+N with a path such as "freq/min": a branch at the current level
+-- with nested branches inside it, one per part. Parts that already exist
+-- are reused, so "freq/max" beside an existing "freq" adds only "max".
+-- Spaces around each part are dropped and empty parts skipped.
+-- Focuses the top branch, at the current level. Returns it and how many
+-- branches were created, or nil when the path has no names in it.
+function M.create_path(cursor, path)
+  local parts = {}
+  for raw in (path .. "/"):gmatch("([^/]*)/") do
+    local part = raw:match("^%s*(.-)%s*$")
+    if part ~= "" then parts[#parts + 1] = part end
+  end
+  if #parts == 0 then return nil end
+
+  local created = 0
+  local top = find_branch(cursor.container, parts[1])
+  if top then
+    tree.focus_node(cursor, top)
+  else
+    top = M.create_branch(cursor, parts[1])
+    created = 1
+  end
+
+  local parent = top
+  for i = 2, #parts do
+    local node = find_branch(parent, parts[i])
+    if not node then
+      -- Inside a branch, new branches also go after its existing branches.
+      local last = 0
+      for j, child in ipairs(parent.children) do
+        if child.kind == "branch" then last = j end
+      end
+      node = tree.add_child(parent, tree.new_node("branch", parts[i]), last + 1)
+      created = created + 1
+    end
+    parent = node
+  end
+  return top, created
+end
+
 ---------------------------------------------------------------------------
 -- Parameters in the organized tree
 --

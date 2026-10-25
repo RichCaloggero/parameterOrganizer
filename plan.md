@@ -158,6 +158,7 @@ Decisions from the discussion of 2026-10-25. Every key here should later be rede
 - The default branch is never rearranged by hand. Positioned paste ("after the focused item") only happens inside user branches.
 - Cut is allowed from the default branch, since that's how parameters get into branches. Pasting into the default branch returns parameters to unplaced, at their source (or sorted) position.
 - Control+N on the effect's level creates a branch at the end of the user branches (ahead of the unplaced parameters) and focuses it. Inside a user branch it works as before: after the focused item.
+- Control+N accepts a path such as "freq/min": the top branch at the current level, with nested branches inside it. Existing branches with the same name (ignoring case) are reused, so "freq/max" beside "freq" adds only "max". Nested branches go after the existing branches of their parent. Focus goes to the top branch; nothing is cut or moved automatically. If every part already exists, it says "Already exists".
 
 ### Sort, filter, revert (default branch only)
 
@@ -168,6 +169,10 @@ Decisions from the discussion of 2026-10-25. Every key here should later be rede
 - The filter stays on after a paste. It clears itself only when a paste empties the filtered list, and then says "filter cleared".
 - Revert (Control+R): original order, no filter.
 - Sort and filter are views: they change nothing saved, so they need no undo.
+
+### Control+T
+
+- Returns to the effect's own level from any depth inside it, landing on the top branch that held the focus (as repeated Left would). At that level already, it says "Already at the top".
 
 ### Home and End stops
 
@@ -200,4 +205,5 @@ These reach the script: Control+Up, Control+Down, Control+A (code 1), Control+F 
 - Control+Delete (after a key spike): reset an effect to its original state, removing its branches and renames. Press it again to confirm; the prompt says how many branches would go.
 - Named orderings per plugin type. "Original" is always present and can't be deleted; the user's orderings can be created, renamed and deleted. Control+Tab moves between the tree and the orderings list for the current effect. Once these exist, choosing Original replaces Control+Delete's reset.
 - Unplaced parameters can't be renamed (F2 on them was considered and dropped for now); to rename one, place it in a branch.
-- Order of work: selection, then Control+Delete, then named orderings.
+- Filtering inside user branches (Control+F and Control+R, no sorting): a view that hides items without changing their order, matched against spoken labels, cleared when emptied or after Control+N in that branch, and announced with "Filtered" on entry. Needs a hidden/visible layer for real nodes, unlike the default branch, which is rebuilt.
+- Order of work: selection (done), paths (done), filtering inside branches, then Control+Delete, then named orderings.

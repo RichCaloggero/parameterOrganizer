@@ -197,5 +197,7 @@ These reach the script: Control+Up, Control+Down, Control+A (code 1), Control+F 
 
 ### Later
 
-- "Start over": clear an effect's organization, after confirmation.
-- Named organizations per plugin type, to choose from, add to, or delete from.
+- Control+Delete (after a key spike): reset an effect to its original state, removing its branches and renames. Press it again to confirm; the prompt says how many branches would go.
+- Named orderings per plugin type. "Original" is always present and can't be deleted; the user's orderings can be created, renamed and deleted. Control+Tab moves between the tree and the orderings list for the current effect. Once these exist, choosing Original replaces Control+Delete's reset.
+- Unplaced parameters can't be renamed (F2 on them was considered and dropped for now); to rename one, place it in a branch.
+- Order of work: selection, then Control+Delete, then named orderings.

@@ -11,7 +11,7 @@ local K = {
   F2 = 26162, F5 = 26165, F12 = 6697266, ESCAPE = 27, DELETE = 6579564,
   TAB = 9, ENTER = 13,
   -- As Control+letter arrives:
-  CTRL_N = 14, A = 1, C = 3, F = 6, G = 7, R = 18, T = 20, V = 22, X = 24,
+  CTRL_N = 14, A = 1, C = 3, F = 6, K = 11, G = 7, R = 18, T = 20, V = 22, X = 24,
   SPACE = 32,
 }
 local CTRL, SHIFT = 4, 8
@@ -55,6 +55,23 @@ local keys = {
   { K.X, CTRL },                           -- 2 cut
   { K.LEFT }, { K.END, CTRL }, { K.RIGHT }, -- frequency, into it
   { K.V, CTRL },                           -- 2 pasted into frequency, for session 2
+  { K.LEFT },
+  -- Multiselect mode: pick Rate and Depth from inside frequency, one at a
+  -- time, moving in between, and move them to both.
+  { K.K, CTRL },                           -- on
+  { K.RIGHT }, { K.SPACE, SHIFT },         -- into frequency: select Rate
+  { K.DOWN }, { K.UP },                    -- moving keeps it: Rate says selected
+  { K.DOWN }, { K.SPACE, SHIFT },          -- select Depth
+  { K.SPACE, SHIFT }, { K.SPACE, SHIFT },  -- unselect and select again
+  { K.X, CTRL },                           -- 2 cut
+  { K.LEFT }, { K.DOWN }, { K.RIGHT },     -- into both
+  { K.V, CTRL },                           -- 2 pasted into both
+  { K.K, CTRL },                           -- off
+  { K.LEFT }, { K.UP }, { K.RIGHT },       -- back into frequency, now empty
+  { K.LEFT }, { K.DOWN }, { K.RIGHT },     -- into both: Rate
+  { K.A, CTRL }, { K.X, CTRL },            -- select both, cut
+  { K.LEFT }, { K.UP }, { K.RIGHT },       -- into frequency
+  { K.V, CTRL },                           -- back where they were, for session 2
   { K.LEFT },
   -- A path: "both/inner/deep" reuses both and nests two new branches.
   { K.CTRL_N, CTRL },

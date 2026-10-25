@@ -32,7 +32,7 @@ local KEY = {
   PAGE_UP = 1885828464, PAGE_DOWN = 1885824110,
   ENTER = 13, TAB = 9, SPACE = 32, F2 = 26162, F5 = 26165, F12 = 6697266, ESCAPE = 27,
   DELETE = 6579564,
-  CTRL_A = 1, CTRL_C = 3, CTRL_F = 6, CTRL_G = 7, CTRL_N = 14, CTRL_R = 18, CTRL_T = 20, CTRL_V = 22, CTRL_X = 24,
+  CTRL_A = 1, CTRL_C = 3, CTRL_F = 6, CTRL_G = 7, CTRL_K = 11, CTRL_N = 14, CTRL_R = 18, CTRL_T = 20, CTRL_V = 22, CTRL_X = 24,
 }
 
 -- With Control held, gfx.getchar reports Tab and Control+I both as 9.
@@ -129,7 +129,7 @@ local function speak_selection_change()
 end
 
 local function speak_focused(with_state)
-  speak(describe_focused(with_state))
+  speak(describe_with_selection(with_state))
 end
 
 -- True while the settings list or an orderings list is open.
@@ -236,11 +236,29 @@ end
 -- joins it, which replaces its nodes. If the focus was on one of them, it
 -- follows that parameter when the view still shows it.
 local function refresh_default_branch(fx_node)
-  -- Selected parameters there are replaced by new nodes, and the list
-  -- has changed under the user, so the selection goes.
-  if sel.container == fx_node then selection.clear(sel) end
+  -- Selected parameters there are replaced by new nodes. In normal mode
+  -- the list has changed under the user, so the selection goes; in
+  -- multiselect mode it follows them, unless the view now hides them.
+  local selected_unplaced = {}
+  if sel.sticky then
+    for node in pairs(sel.set) do
+      if node.data.unplaced and node.parent == fx_node then selected_unplaced[node] = node.data.index end
+    end
+  elseif sel.scope == fx_node then
+    selection.clear(sel)
+  end
   local focused = tree.focused(cursor)
   local count = organizer.refresh_unplaced(fx_node)
+  if sel.sticky then
+    local by_index = {}
+    for _, child in ipairs(fx_node.children) do
+      if child.data.unplaced then by_index[child.data.index] = child end
+    end
+    selection.update(sel, function(n)
+      local index = selected_unplaced[n]
+      return index and by_index[index]
+    end)
+  end
   if cursor.container ~= fx_node then return count end
   if focused and focused.data.unplaced then
     for i, child in ipairs(fx_node.children) do
@@ -472,9 +490,11 @@ local function delete()
   end
   pending_delete = nil
   local fx_node = tree.enclosing(cursor.container, "fx")
-  selection.clear(sel)
+  if not sel.sticky then selection.clear(sel) end
   tree.remove_focused(cursor)
   refresh_default_branch(fx_node)
+  -- In multiselect mode, anything selected inside a deleted branch goes.
+  selection.update(sel)
   save_layout()
   speak("Deleted " .. node.label .. ". " .. describe_focused(true))
 end
@@ -554,7 +574,7 @@ end
 
 ---------------------------------------------------------------------------
 -- Named orderings. Control+Tab opens the list for the effect the cursor
--- is in (or on); Control+Tab or Escape closes it. Enter makes the focused
+-- is in; Control+Tab or Escape closes it. Enter makes the focused
 -- ordering active, Control+N adds a copy of the active one, F2 renames
 -- and Delete deletes. Original is always first and can't be changed.
 
@@ -571,9 +591,10 @@ local function show_orderings(focus_name)
   cursor = { container = list, index = index }
 end
 
+-- Only from inside an effect, like Control+N: on an effect's name, go in
+-- with Right first.
 local function open_orderings()
-  local fx_node = tree.focused(cursor)
-  if not (fx_node and fx_node.kind == "fx") then fx_node = tree.enclosing(cursor.container, "fx") end
+  local fx_node = tree.enclosing(cursor.container, "fx")
   if not fx_node then
     speak("Not available here")
     return
@@ -791,7 +812,7 @@ local function to_effect_level()
   end
   local node = tree.focused(cursor) or cursor.container
   while node.parent ~= fx_node do node = node.parent end
-  selection.clear(sel)
+  if sel.sticky then selection.forget_anchor(sel) else selection.clear(sel) end
   tree.focus_node(cursor, node)
   speak_focused(false)
 end
@@ -840,10 +861,13 @@ local function handle_key(code, cap)
   -- A branch delete is confirmed only by pressing Delete again straight away.
   if code ~= KEY.DELETE then pending_delete = nil end
 
-  -- Plain movement drops the selection, as in any Windows list.
+  -- Plain movement drops the selection, as in any Windows list, except in
+  -- multiselect mode, where the next range starts from the new place.
   local plain_move = plain and (code == KEY.UP or code == KEY.DOWN or code == KEY.LEFT
     or code == KEY.RIGHT or to_end ~= nil or (code > 32 and code < 127))
-  if plain_move then selection.clear(sel) end
+  if plain_move then
+    if sel.sticky then selection.forget_anchor(sel) else selection.clear(sel) end
+  end
 
   local vertical = code == KEY.UP or code == KEY.DOWN
   local selecting = not in_list()
@@ -884,14 +908,26 @@ local function handle_key(code, cap)
       speak_selection_change()
     end
   elseif selecting and shift_only and code == KEY.SPACE then
+    -- Shift+Space: the word "unselected" is never spoken, only the count.
     if tree.focused(cursor) then
-      local on = selection.toggle(sel, cursor)
-      speak(describe_focused(true) .. (on and ", " or ", not selected, ")
-        .. selection.count(sel) .. " selected")
+      selection.toggle(sel, cursor)
+      speak(selection.count(sel) .. " selected")
     end
   elseif selecting and ctrl_only and code == KEY.CTRL_A then
     local count = selection.select_leaves(sel, cursor)
-    speak(count == 0 and "No parameters here" or count .. " selected")
+    speak(count == 0 and "No parameters here" or selection.count(sel) .. " selected")
+  elseif selecting and ctrl_only and code == KEY.CTRL_K then
+    -- Control+K: multiselect mode on or off. Turning it on keeps what is
+    -- already selected, now held for the whole effect; off clears it.
+    sel.sticky = not sel.sticky
+    if sel.sticky then
+      if sel.scope then sel.scope = tree.enclosing(sel.scope, "fx") or sel.scope end
+      speak("Multiselect on")
+    else
+      local had = selection.count(sel) > 0
+      selection.clear(sel)
+      speak(had and "Multiselect off, selection cleared" or "Multiselect off")
+    end
   elseif ctrl_only and vertical then
     -- Control+Up and Control+Down: move, keeping the selection.
     if (code == KEY.UP and tree.move_prev or tree.move_next)(cursor) then

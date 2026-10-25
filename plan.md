@@ -181,6 +181,13 @@ Decisions from the discussion of 2026-10-25. Every key here should later be rede
 - A level without both kinds has no middle stop, so Home and End work as before.
 - Control+Home and Control+End always go to the first or last item, following the same setting.
 
+### Multiselect mode (revision after REAPER testing)
+
+- Control+K (code 11; Control+M was rejected because it arrives as 13, like Enter) toggles a sticky multiselect mode, announced each time, never switched automatically. Turning it on keeps any selection; turning it off clears it.
+- In the mode: plain movement keeps the selection (and resets the range anchor); only selected items say "selected"; Shift+Space toggles (speech: only the count, "N selected"); Shift with the arrows and Control+A add to the selection; the selection may span levels within one effect; Escape clears it but leaves the mode on.
+- When the default branch is rebuilt (sort, filter, paste), selected unplaced parameters stay selected if still shown. Delete drops selected items it removes.
+- Normal mode is unchanged (below), except that Shift+Space now speaks only the total.
+
 ### Selection
 
 - Standard Windows behaviour: Shift+Up and Shift+Down extend a contiguous selection; Shift+Home and Shift+End extend to the ends (following the "Home and End" setting); Control+Up and Control+Down move without changing the selection; Shift+Space toggles the focused item (Control+Space doesn't reach the script; OSARA uses it for play and pause); Control+A selects every parameter (leaf) at the current level, skipping branches. A plain arrow clears the selection.

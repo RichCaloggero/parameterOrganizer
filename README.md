@@ -76,14 +76,27 @@ Sorting and filtering change nothing that's saved.
 
 ### Selecting
 
-Selection works within one level, as in any Windows list.
+There are three ways to select several parameters: Shift with the arrows for a few neighbours, a filter plus Control+A for a named group, and multiselect mode for a scattered handful.
+
+Normally, selection works within one level, as in any Windows list:
 
 - **Shift+Up and Shift+Down:** extend the selection. You hear how many are selected.
 - **Shift+Home and Shift+End:** extend the selection to the first or last item.
-- **Shift+Space:** select or unselect the focused item.
+- **Shift+Space:** select or unselect the focused item. You hear how many are now selected, for example "2 selected".
 - **Control+Up and Control+Down:** move without changing the selection. A selected item says "selected".
 - **Control+A:** select every parameter at this level, skipping branches.
 - Moving with a plain arrow key, Home, End or a letter clears the selection.
+- **Escape:** clear the selection.
+
+**Control+K** turns multiselect mode on or off, and says which each time. It never changes by itself. In multiselect mode:
+
+- **Moving never clears the selection,** so you can wander, pick with Shift+Space, and move on. Only selected items say "selected".
+- **The selection can span levels within one effect,** for example a parameter from one branch and another from the default branch. Selecting in another effect starts a new selection.
+- **Shift with the arrows and Control+A add** to the selection instead of replacing it.
+- **Escape** clears the selection, and the mode stays on.
+- **Turning the mode off** clears the selection.
+
+Cut and paste work the same in both modes. Parameters selected from several places are pasted in tree order.
 
 ### Organizing
 
@@ -102,7 +115,7 @@ Each plugin can have several saved organizations, called orderings. One of them 
 - **Original** is always first in the list. It's the plugin with no branches: every parameter in its own order. It can't be changed, renamed or deleted, so you can always get back to it.
 - **Your first change** to a plugin while Original is active starts a new ordering, called "Ordering 1", and you hear "New ordering".
 
-Press Control+Tab anywhere inside an effect, or on its name, to open its orderings list. The active ordering says "active". In the list:
+Press Control+Tab anywhere inside an effect to open its orderings list. On an effect's name, go into it with Right first; elsewhere Control+Tab says "Not available here". Inside a container, you get the orderings of the effect you're in: the container's own, or those of an effect it holds once you've gone into that effect. The active ordering says "active". In the list:
 
 - **Up, Down, Home and End:** move through the orderings.
 - **Enter:** make the focused ordering active, and go back to the tree. If you were inside the effect, you land on its own level.

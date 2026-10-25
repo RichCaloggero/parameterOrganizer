@@ -69,3 +69,67 @@ test("clearing", function()
   check_equal(selection.count(sel), 0)
   check_equal(labels(sel), "")
 end)
+
+---------------------------------------------------------------------------
+-- Multiselect mode
+
+-- An effect with branch a holding p and q, then parameters x, y, z.
+local function effect()
+  local fx = tree.new_node("fx", "EQ")
+  local a = tree.add_child(fx, tree.new_node("branch", "a"))
+  for _, name in ipairs({ "p", "q" }) do tree.add_child(a, tree.new_node("param", name)) end
+  for _, name in ipairs({ "x", "y", "z" }) do tree.add_child(fx, tree.new_node("param", name)) end
+  return fx, a
+end
+
+test("multiselect: the selection spans levels within an effect, in tree order", function()
+  local fx, a = effect()
+  local sel = selection.new()
+  sel.sticky = true
+  selection.toggle(sel, { container = fx, index = 3 })   -- y
+  selection.toggle(sel, { container = a, index = 2 })    -- q
+  check_equal(labels(sel), "q y")
+end)
+
+test("multiselect: ranges and Control+A add to the selection", function()
+  local fx, a = effect()
+  local sel = selection.new()
+  sel.sticky = true
+  selection.toggle(sel, { container = a, index = 1 })    -- p
+  local c = { container = fx, index = 2 }               -- x
+  tree.move_next(c)
+  selection.extend(sel, c, 2)
+  check_equal(labels(sel), "p x y")
+  tree.move_prev(c)
+  selection.extend(sel, c, 3)
+  check_equal(labels(sel), "p x", "the range shrinks, the earlier pick stays")
+  selection.select_leaves(sel, c)
+  check_equal(labels(sel), "p x y z")
+end)
+
+test("multiselect: moving to another effect starts afresh", function()
+  local fx = effect()
+  local other = effect()
+  local sel = selection.new()
+  sel.sticky = true
+  selection.toggle(sel, { container = fx, index = 2 })
+  selection.toggle(sel, { container = other, index = 3 })
+  check_equal(labels(sel), "y")
+  check_equal(selection.nodes(sel)[1].parent, other)
+end)
+
+test("update drops nodes no longer in the tree and follows replacements", function()
+  local fx = effect()
+  local sel = selection.new()
+  sel.sticky = true
+  local c = { container = fx, index = 2 }
+  selection.select_leaves(sel, c)                       -- x y z
+  local x, y = fx.children[2], fx.children[3]
+  local new_x = tree.new_node("param", "x")
+  fx.children = { fx.children[1], new_x }               -- rebuilt: y and z gone
+  new_x.parent = fx
+  selection.update(sel, function(n) if n == x then return new_x end end)
+  check_equal(labels(sel), "x")
+  check_equal(selection.is_selected(sel, new_x), true)
+  check_equal(selection.is_selected(sel, y), false)
+end)

@@ -6,9 +6,11 @@ Everything is spoken through OSARA. The script runs in a tiny hidden window that
 
 ## What it does
 
-- **Source tree:** every track that has effects (the master track first), each effect on it, and each effect's parameters. Effects inside REAPER 7 containers are shown nested inside their container.
-- **Organized tree:** the same tracks and effects, but each effect starts empty. You create branches inside it and paste parameters into them. For example, a stereo phaser could become frequency, then min and max, then left and right.
-- **Autolabels:** a parameter pasted into branches is renamed by removing the words of the branches above it. "left Q attack", pasted under the branches Q and attack, becomes simply "left".
+- **One tree:** every track that has effects (the master track first), each effect on it, and inside each effect its parameters. Effects inside REAPER 7 containers are shown nested inside their container.
+- **Use it as it is, or organize:** a small plugin is fine as it comes. For a busy one, you can sort and filter its parameters, or go further and create branches of your own and move parameters into them. For example, a stereo phaser could become freq, then min and max, then left and right.
+- **The default branch:** inside an effect, your branches come first. After them come the parameters you haven't placed in a branch yet, in the plugin's own order. This list is called the default branch. You can sort and filter it, and always get back to the original order.
+- **Autolabels:** a parameter placed in branches is renamed by removing the words of the branches above it. "left Q attack", placed under the branches Q and attack, becomes simply "left".
+- **Named orderings:** each plugin can have several saved organizations. "Original", the plugin with no branches, is always available.
 - **Saved per plugin:** your organization of a plugin is saved automatically, and every copy of that plugin, on any track and in any project, gets the same tree.
 
 ## Requirements
@@ -27,88 +29,128 @@ Run the script from your shortcut, not from the ReaScript editor. Pressing the s
 
 ## Getting started
 
-1. Press your shortcut. You hear "Parameter organizer, source tree".
+1. Press your shortcut. You hear "Parameter organizer".
 2. Use Down to reach a track, Right to go into it, Right again to go into an effect, then Up and Down to hear its parameters and their values.
-3. Press Control+Tab to switch to the organized tree. Go into the same track and effect with Right. An effect you haven't organized yet says "empty".
-4. Press Control+N, type a branch name such as "frequency", and press Enter.
-5. Press Control+Tab to go back to the source tree, find a parameter, and press Control+C.
-6. Press Control+Tab again, press Right to go inside your new branch, and press Control+V. The parameter is placed there, with its autolabel.
-7. Press Escape to quit. Next time, your branches are still there, for every copy of that plugin.
+3. Press Control+F and type a word, such as "freq". Only the parameters containing it are left, and you hear how many match.
+4. Press Control+A to select them all, then Control+X to cut them.
+5. Press Control+N, type a branch name such as "freq", and press Enter. The new branch is placed ahead of the parameters, and you're on it.
+6. Press Right to go inside it, and Control+V to paste. The parameters are placed there, with their autolabels. When the last filtered parameter has been moved, the filter clears itself.
+7. Press Control+T to go back to the effect's own level, and carry on with the next group.
+8. Press Escape to quit. Next time, your branches are still there, for every copy of that plugin.
 
 ## Keyboard
 
-### Moving around, in either tree
+### Moving around
 
 - **Up and Down:** the previous or next item at the same level. Branches, tracks and effects say "collapsed", which means you can go into them with Right. Parameters say their value.
-- **Right:** go into a track, effect, container or branch, and hear its first item. An empty one says "empty".
+- **Right:** go into a track, effect, container or branch, and hear its first item. An empty one says "empty". An effect whose default branch is filtered says "Filtered" first.
 - **Left:** close the current level and go back to its parent.
-- **Home and End:** the first or last item at the current level. By default these are swapped: see "Home and End" below.
+- **Home and End:** move one stop at a time. On a level that has both branches and parameters, such as an effect you have organized, the stops are the first item, the first parameter, and the last item. Elsewhere, they are the first and last item. By default Home and End are swapped: see "Home and End" below.
+- **Control+Home and Control+End:** always the first or last item.
+- **Control+T:** back to the effect's own level from anywhere inside it, landing on the branch you were in.
 - **A letter or digit:** the next item at this level starting with it.
-- **Control+Tab:** switch between the source tree and the organized tree. Each tree remembers where you were.
-- **F5:** refresh both trees from the project, after adding, removing or moving effects.
+- **Control+Tab:** the named orderings for the effect you're in. See "Named orderings" below.
+- **F5:** refresh from the project, after adding, removing or moving effects.
 - **F12:** open the settings list.
-- **Escape:** quit.
+- **Escape:** clear the selection, if there is one. Otherwise, quit.
 
-### Changing values, on any parameter in either tree
+### Changing values
 
-- **Shift+Up and Shift+Down:** a small step up or down. Each step always changes what the plugin displays, so a selector such as a reverb type moves one choice at a time.
-- **Page Up and Page Down:** a large step, about a tenth of the range.
-- **Shift+Home and Shift+End:** the minimum or the maximum. By default, Shift+Home is the minimum.
+- **Page Up and Page Down:** a small step up or down. Each step always changes what the plugin displays, so a selector such as a reverb type moves one choice at a time.
+- **Shift+Page Up and Shift+Page Down:** a large step, about a tenth of the range.
+- **Control+Page Up and Control+Page Down:** the maximum or the minimum.
 - **Enter:** type an exact value in the plugin's own units, for example "2500", "2.5 kHz" or "-6". For selectors, type the word shown, for example "Plate".
 - REAPER's own Bypass and Delta parameters, which every effect has, work as on/off switches: the upward keys turn them on, and the downward keys turn them off.
 
-Value changes are not added to REAPER's undo history.
+Page Up and Page Down are never swapped. Value changes are not added to REAPER's undo history.
 
-### Organizing, in the organized tree
+### Sorting and filtering the default branch
 
-- **Control+N:** create a branch at the current level, right after the focused item. To create a branch inside another branch or inside an effect, go into it first with Right.
-- **Control+C:** copy the focused parameter. This works in either tree.
-- **Control+X:** cut the focused parameter. It stays where it is until you paste it.
-- **Control+V:** paste at the current level, right after the focused item. Each parameter appears only once in the organized tree, so pasting a parameter that's already placed moves it, and you hear where it came from. A parameter can only be pasted inside its own effect.
-- **F2:** rename the focused branch or parameter. Clearing a parameter's name gives it back its autolabel.
-- **Delete:** remove a parameter from the organized tree. On a branch with anything in it, you're asked first: press Delete again to confirm.
+These work on an effect's own level, and only affect the parameters you haven't placed yet. Your branches stay where they are.
+
+- **Control+G:** sort in natural order, ignoring case, so "band 2" comes before "band 10".
+- **Control+F:** show only the parameters whose names contain the text you type. Case and extra spaces don't matter, but the words must be next to each other and in the order you type them. You hear how many match, and land on the first. An empty entry clears the filter. When you move the last filtered parameter into a branch, the filter clears itself.
+- **Control+R:** back to the original order, with no filter.
+
+Sorting and filtering change nothing that's saved.
+
+### Selecting
+
+Selection works within one level, as in any Windows list.
+
+- **Shift+Up and Shift+Down:** extend the selection. You hear how many are selected.
+- **Shift+Home and Shift+End:** extend the selection to the first or last item.
+- **Shift+Space:** select or unselect the focused item.
+- **Control+Up and Control+Down:** move without changing the selection. A selected item says "selected".
+- **Control+A:** select every parameter at this level, skipping branches.
+- Moving with a plain arrow key, Home, End or a letter clears the selection.
+
+### Organizing
+
+- **Control+N:** create a branch. On an effect's own level, it goes after your other branches; inside a branch, it goes after the focused item. To create a branch inside another one, go into it first with Right. You can type a path, such as "freq/min", to create a branch with others nested inside it in one step. Branches that already exist are reused, so "freq/max" next to an existing "freq" only adds "max". You land on the top branch of the path.
+- **Control+X:** cut the selected parameters, or the focused one. They stay where they are until you paste. Control+C does the same.
+- **Control+V:** paste. Inside a branch, the parameters go after the focused item, in the order you heard them when you cut them. On an effect's own level, pasting returns parameters to the default branch, unplaced. Each parameter appears only once, so pasting moves it, and you hear where it came from. A parameter can only be pasted inside its own effect.
+- **F2:** rename the focused branch, or a parameter you have placed in a branch. Clearing a parameter's name gives it back its autolabel.
+- **Delete:** return a placed parameter to the default branch. On a branch with anything in it, you're asked first: press Delete again to confirm, and its parameters return to the default branch.
 
 Tracks and effects mirror your project, so they can't be renamed or deleted here.
 
-### In the settings list
+## Named orderings
 
-The settings list uses the same keys: Up and Down move between settings, and Shift+Up, Shift+Down, Page Up and Page Down change the focused one. F12 or Escape returns you to where you were.
+Each plugin can have several saved organizations, called orderings. One of them is active, and every copy of the plugin shows it.
+
+- **Original** is always first in the list. It's the plugin with no branches: every parameter in its own order. It can't be changed, renamed or deleted, so you can always get back to it.
+- **Your first change** to a plugin while Original is active starts a new ordering, called "Ordering 1", and you hear "New ordering".
+
+Press Control+Tab anywhere inside an effect, or on its name, to open its orderings list. The active ordering says "active". In the list:
+
+- **Up, Down, Home and End:** move through the orderings.
+- **Enter:** make the focused ordering active, and go back to the tree. If you were inside the effect, you land on its own level.
+- **Control+N:** add a new, empty ordering and make it active. Give it a name. The list stays open, so press Control+Tab or Escape to start organizing.
+- **Control+C:** copy the focused ordering.
+- **Control+V:** paste a copy after the focused ordering, named, for example, "Ordering 1 copy". Press F2 to rename it and Enter to switch to it. An ordering can only be pasted into the same plugin's list. Copying an ordering doesn't affect parameters you've cut in the tree.
+- **F2:** rename the focused ordering.
+- **Delete:** delete the focused ordering. Press Delete again to confirm. If it was active, Original becomes active.
+- **Control+Tab or Escape:** close the list and go back to where you were.
+
+## Settings
+
+F12 opens the settings list. Up and Down move between settings, and Page Up and Page Down change the focused one. F12 or Escape returns you to where you were.
 
 ## Home and End
 
 On some keyboards, Home sits below End. The "Home and End" setting is swapped by default, for those keyboards. Like the arrow keys, the lower key goes down and the upper key goes up:
 
-- **Home** moves to the last item, and Shift+Home sets the minimum.
-- **End** moves to the first item, and Shift+End sets the maximum.
+- **Home** moves down a stop, towards the last item. Shift+Home extends the selection downwards, and Control+Home goes straight to the last item.
+- **End** moves up a stop, towards the first item. Shift+End extends the selection upwards, and Control+End goes straight to the first item.
 
-On a standard keyboard, where Home is above End, open the settings list with F12 and change "Home and End" to standard. That reverses both.
-
-## In the source tree
-
-Each parameter in the source tree also tells you where it's placed in the organized tree, after its value. For example, "placed in Q, attack", or "unplaced". This helps you find what's still left to organize.
+On a standard keyboard, where Home is above End, open the settings list with F12 and change "Home and End" to standard. That reverses all of them.
 
 ## Saving
 
 - **When:** your organization is saved automatically after every change. There is no save command.
-- **Where:** each plugin type's layout is a plain-text file in REAPER's resource folder, in `ParameterOrganizer\layouts`. Options, then "Show REAPER resource path in explorer/finder", opens the resource folder.
+- **Where:** each plugin type's orderings are kept in one plain-text file in REAPER's resource folder, in `ParameterOrganizer\layouts`. Options, then "Show REAPER resource path in explorer/finder", opens the resource folder.
 - **Plugin identity:** plugins are recognised by REAPER's identifier for the plugin type, so renaming an instance on a track doesn't matter.
-- **Containers:** a container's own parameters depend on that particular container, so a container's layout is saved in the project instead. It's kept when you save the project. Effects inside containers use their per-plugin files as usual.
+- **Containers:** a container's own parameters depend on that particular container, so a container's orderings are saved in the project instead. They're kept when you save the project. Effects inside containers use their per-plugin files as usual.
 - **Plugin updates:** if an update reorders a plugin's parameters, they're found again by name. A parameter that can't be found at all stays in your layout and says "missing", so your work isn't lost. You can delete a missing parameter.
 
 ## Containers
 
-A container appears like an effect. Go into it with Right: first come the effects it holds, then the container's own parameters. Containers inside containers work the same way. In the organized tree, your branches inside a container always come after the effects it holds.
+A container appears like an effect. Go into it with Right: first come the effects it holds, then your branches, then the container's own unplaced parameters. Containers inside containers work the same way.
 
 ## Limitations
 
 - Effects on media items (take FX) aren't included yet.
 - Parameter values are read by the effect's position in the chain. After reordering effects while the script is open, press F5.
 - Autolabels match whole words only, so "Atk" isn't matched by a branch called "attack". Rename the branch, or the parameter with F2.
-- If an effect is moved to another track while the script is open, the organized tree treats it as new, and it gets its saved layout again after F5.
+- Filtering and sorting work only on the default branch, not inside your own branches.
+- Unplaced parameters can't be renamed. Place a parameter in a branch to rename it.
+- Branches can't be cut and moved.
+- If an effect is moved to another track while the script is open, it's treated as new, and it gets its saved layout again after F5.
 
 ## For developers
 
-The tree logic, autolabeling, value search, settings and layouts are plain Lua with no REAPER calls, and are tested outside REAPER:
+The tree logic, autolabeling, value search, sorting and filtering, selection, settings, layouts and orderings are plain Lua with no REAPER calls, and are tested outside REAPER:
 
 - `lua tests\run.lua` runs the unit tests.
 - `lua tests\smoke_main.lua` runs the whole script against a fake REAPER with a scripted series of key presses, prints everything that would be spoken, then runs a second session to check that saved layouts come back.

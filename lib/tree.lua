@@ -3,7 +3,8 @@
 --
 -- A node is { kind, label, data, parent, children }.
 -- kind is "root", "track", "fx", "branch" or "param"; the settings list
--- uses "setting". Only "param" and "setting" are leaves.
+-- uses "setting" and the orderings list "ordering". Only "param",
+-- "setting" and "ordering" are leaves.
 --
 -- A cursor is { container, index }: the focused item is
 -- container.children[index]. An empty container is entered with index 0,
@@ -16,7 +17,7 @@ function M.new_node(kind, label, data)
 end
 
 function M.is_leaf(node)
-  return node.kind == "param" or node.kind == "setting"
+  return node.kind == "param" or node.kind == "setting" or node.kind == "ordering"
 end
 
 function M.index_of(node)

@@ -9,8 +9,9 @@ local K = {
   UP = 30064, DOWN = 1685026670, LEFT = 1818584692, RIGHT = 1919379572,
   HOME = 6647396, END = 1752132965, PAGE_UP = 1885828464, PAGE_DOWN = 1885824110,
   F2 = 26162, F5 = 26165, F12 = 6697266, ESCAPE = 27, DELETE = 6579564,
+  TAB = 9, ENTER = 13,
   -- As Control+letter arrives:
-  CTRL_N = 14, A = 1, F = 6, G = 7, R = 18, T = 20, V = 22, X = 24,
+  CTRL_N = 14, A = 1, C = 3, F = 6, G = 7, R = 18, T = 20, V = 22, X = 24,
   SPACE = 32,
 }
 local CTRL, SHIFT = 4, 8
@@ -61,11 +62,24 @@ local keys = {
   { K.T, CTRL },                           -- back to the Phaser's level, on both
   { K.T, CTRL },                           -- already there
   { K.CTRL_N, CTRL },                      -- "both" again: already exists
+  -- Named orderings.
+  { K.TAB, CTRL },                         -- list for Phaser: Ordering 1 active
+  { K.CTRL_N, CTRL },                      -- "Spare": empty, active, list stays open
+  { K.ESCAPE }, { K.TAB, CTRL },           -- the tree shows no branches; back to the list
+  { K.UP }, { K.C, CTRL }, { K.V, CTRL },  -- copy Ordering 1, paste "Ordering 1 copy" after it
+  { K.END }, { K.ENTER },                  -- Original: active, back in the tree
+  { K.TAB, CTRL }, { K.DOWN },             -- Ordering 1
+  { K.ENTER },                             -- active again: branches back
+  { K.TAB, CTRL }, { K.HOME, CTRL },       -- the last: Spare
+  { K.F2 },                                -- rename to "Spare 2"
+  { K.DELETE }, { K.DELETE },              -- ask, then delete
+  { K.F2 },                                -- Original can't be renamed
+  { K.ESCAPE },                            -- close the list
   { K.F12 }, { K.PAGE_DOWN }, { K.ESCAPE }, -- change a setting
   { K.F5 },                                -- refresh keeps the place
   { K.ESCAPE },                            -- quit
 }
-local answers = { "frequency", "Q", "Q factor", "dep", "Mix depth", "", "both", "both/inner/deep", "Both" }
+local answers = { "frequency", "Q", "Q factor", "dep", "Mix depth", "", "both", "both/inner/deep", "Both", "Spare", "Spare 2" }
 
 -- Session 2: the second track's Phaser is a new instance of the same plugin.
 local keys_session2 = {

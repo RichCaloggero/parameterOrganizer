@@ -9,7 +9,7 @@
 -- branches followed by the effect's unplaced parameters (the default
 -- branch), which Control+F filters, Control+G sorts and Control+R reverts.
 -- Control+X and Control+V move parameters into branches.
--- F12 opens the settings list.
+-- Control+Tab opens the effect's named orderings; F12 the settings list.
 
 local script_dir = debug.getinfo(1, "S").source:match("^@(.*[/\\])") or ""
 package.path = script_dir .. "lib/?.lua;" .. package.path
@@ -22,6 +22,7 @@ local organizer = require("organizer")
 local layout = require("layout")
 local storage = require("storage")
 local selection = require("selection")
+local orderings = require("orderings")
 
 local MOD_CTRL, MOD_SHIFT, MOD_ALT = 4, 8, 16
 
@@ -29,10 +30,19 @@ local KEY = {
   UP = 30064, DOWN = 1685026670, LEFT = 1818584692, RIGHT = 1919379572,
   HOME = 6647396, END = 1752132965,
   PAGE_UP = 1885828464, PAGE_DOWN = 1885824110,
-  ENTER = 13, SPACE = 32, F2 = 26162, F5 = 26165, F12 = 6697266, ESCAPE = 27,
+  ENTER = 13, TAB = 9, SPACE = 32, F2 = 26162, F5 = 26165, F12 = 6697266, ESCAPE = 27,
   DELETE = 6579564,
   CTRL_A = 1, CTRL_C = 3, CTRL_F = 6, CTRL_G = 7, CTRL_N = 14, CTRL_R = 18, CTRL_T = 20, CTRL_V = 22, CTRL_X = 24,
 }
+
+-- With Control held, gfx.getchar reports Tab and Control+I both as 9.
+-- js_ReaScriptAPI, when installed, can tell them apart; without it,
+-- Control+I also opens the orderings list, which is harmless.
+local VK_TAB = 0x09
+local function tab_is_down()
+  if not reaper.JS_VKeys_GetState then return true end
+  return (reaper.JS_VKeys_GetState(-2):byte(VK_TAB) or 0) ~= 0
+end
 
 -- Settings persist in REAPER's ExtState, so they survive script updates.
 local EXTSTATE_SECTION = "ParameterOrganizer"
@@ -46,10 +56,13 @@ local settings = settings_lib.new({
 
 -- The source tree is read from the project and never shown: the organized
 -- tree, which mirrors it, is the one tree the user moves through.
--- cursor is whichever list has the keyboard: the tree, or the settings
--- list while it is open (tree_cursor then remembers the place).
+-- cursor is whichever list has the keyboard: the tree, or the settings or
+-- orderings list while one is open (tree_cursor then remembers the place,
+-- and list_kind says which list it is).
 local source_root, organized_root
-local cursor, tree_cursor
+local cursor, tree_cursor, list_kind
+-- The effect whose orderings are listed, while that list is open.
+local list_fx
 -- The selected items, all at one level of the tree.
 local sel = selection.new()
 
@@ -60,7 +73,15 @@ local sel = selection.new()
 local AFTER_DIALOG_DELAY = 0
 local awaiting_focus, held_speech, focus_seen_at = false, nil, nil
 
+-- Something to say before the next message, such as a new ordering
+-- having been made, so it doesn't compete with that message.
+local pending_notice
+
 local function speak(msg)
+  if pending_notice then
+    msg = pending_notice .. msg
+    pending_notice = nil
+  end
   if awaiting_focus then
     held_speech = msg
     return
@@ -85,6 +106,7 @@ end
 -- The value spoken after a leaf's label: a parameter's or a setting's.
 local function value_of(node)
   if node.kind == "setting" then return settings.value_text(node.data.key) end
+  if node.kind == "ordering" then return node.data.active and "active" or "" end
   return reaper_fx.formatted_value(node)
 end
 
@@ -110,14 +132,15 @@ local function speak_focused(with_state)
   speak(describe_focused(with_state))
 end
 
-local function in_settings()
+-- True while the settings list or an orderings list is open.
+local function in_list()
   return tree_cursor ~= nil
 end
 
 -- The effect whose own level the cursor is on (where its branches and
 -- default branch are), or nil.
 local function effect_level()
-  if in_settings() or cursor.container.kind ~= "fx" then return nil end
+  if in_list() or cursor.container.kind ~= "fx" then return nil end
   return cursor.container
 end
 
@@ -131,35 +154,74 @@ local function source_names(fx_guid)
   return names
 end
 
--- Gives every organized effect that doesn't have its layout yet the one
--- saved for it (new effects appear at startup and after F5).
+-- Each plugin type's named orderings (a container's are its own), loaded
+-- once and shared by every instance: storage key -> collection.
+local collections = {}
+
+local function collection_key(data)
+  if data.is_container then return "container " .. data.guid end
+  return data.plugin_key
+end
+
+local function collection_for(fx_node)
+  local key = collection_key(fx_node.data)
+  if not collections[key] then collections[key] = orderings.parse(storage.load(fx_node.data)) end
+  return collections[key]
+end
+
+-- Calls fn for fx_node and every other instance sharing its orderings.
+local function each_instance(fx_node, fn)
+  local key = collection_key(fx_node.data)
+  tree.walk(organized_root, function(n)
+    if n.kind == "fx" and collection_key(n.data) == key then fn(n) end
+  end)
+end
+
+-- Gives an effect its active ordering's branches and parameters.
+local function apply_active(fx_node)
+  local coll = collection_for(fx_node)
+  layout.apply(fx_node, orderings.text(coll, coll.active), source_names(fx_node.data.guid))
+end
+
+-- Gives every organized effect that doesn't have its layout yet its
+-- active ordering (new effects appear at startup and after F5).
 local function load_layouts()
   tree.walk(organized_root, function(n)
     if n.kind == "fx" and not n.layout_loaded then
       n.layout_loaded = true
-      local text = storage.load(n.data)
-      if text then layout.apply(n, text, source_names(n.data.guid)) end
+      apply_active(n)
     end
   end)
 end
 
--- Saves the layout of the effect being organized, after every change.
--- Other instances of the same plugin share the layout, so they are
--- updated at once (the cursor is never inside them while this one changes).
+local function save_collection(fx_node)
+  if storage.save(fx_node.data, orderings.serialize(collection_for(fx_node))) then return true end
+  speak("Could not save the layout")
+  return false
+end
+
+-- Saves the layout of the effect being organized into its active
+-- ordering, after every change. Original never changes: the first change
+-- made while it is active starts a new ordering. Other instances of the
+-- same plugin share the ordering, so they are updated at once (the cursor
+-- is never inside them while this one changes).
 local function save_layout()
   local fx_node = tree.enclosing(cursor.container, "fx")
   if not fx_node then return end
+  local coll = collection_for(fx_node)
   local text = layout.serialize(fx_node)
-  if not storage.save(fx_node.data, text) then
-    speak("Could not save the layout")
-    return
+  if not coll.active then
+    if not text:find("\n[BP]\t") then return end
+    local name = orderings.new_name(coll)
+    orderings.add(coll, name, text)
+    orderings.set_active(coll, name)
+    pending_notice = "New ordering, " .. name .. ". "
+  else
+    orderings.set_active_text(coll, text)
   end
-  if fx_node.data.is_container then return end
-  tree.walk(organized_root, function(n)
-    if n.kind == "fx" and n ~= fx_node and not n.data.is_container
-       and n.data.plugin_key == fx_node.data.plugin_key then
-      layout.apply(n, text, source_names(n.data.guid))
-    end
+  if not save_collection(fx_node) then return end
+  each_instance(fx_node, function(n)
+    if n ~= fx_node then layout.apply(n, text, source_names(n.data.guid)) end
   end)
 end
 
@@ -258,7 +320,7 @@ end
 -- also creates the branches nested inside it, reusing any that exist.
 -- The focus goes to the top branch.
 local function create_branch()
-  if in_settings() or not organizer.can_create_branch(cursor) then
+  if in_list() or not organizer.can_create_branch(cursor) then
     speak("Not available here")
     return
   end
@@ -281,7 +343,7 @@ end
 -- parameter back its autolabel; a branch keeps its name.
 local function rename()
   local node = tree.focused(cursor)
-  if in_settings() or not organizer.can_rename(node) then
+  if in_list() or not organizer.can_rename(node) then
     speak("Not available here")
     return
   end
@@ -336,7 +398,7 @@ end
 -- level, returns it to unplaced (the default branch). When a paste
 -- empties a filtered default branch, the filter has done its job: clear it.
 local function paste()
-  if in_settings() then
+  if in_list() then
     speak("Not available here")
     return
   end
@@ -397,7 +459,7 @@ local pending_delete
 
 local function delete()
   local node = tree.focused(cursor)
-  if in_settings() or not organizer.can_delete(node) then
+  if in_list() or not organizer.can_delete(node) then
     speak("Not available here")
     return
   end
@@ -478,22 +540,213 @@ local function open_settings()
     tree.add_child(list, tree.new_node("setting", def.label, { key = def.key }))
   end
   selection.clear(sel)
-  tree_cursor = cursor
+  tree_cursor, list_kind = cursor, "settings"
   cursor = tree.new_cursor(list)
   speak("Settings. " .. describe_focused(true))
 end
 
-local function close_settings()
+-- Closes the settings or orderings list, back to the place in the tree.
+local function close_list(prefix)
   cursor = tree_cursor
-  tree_cursor = nil
-  speak("Settings closed. " .. describe_focused(true))
+  tree_cursor, list_kind, list_fx = nil, nil, nil
+  speak(prefix .. describe_focused(true))
+end
+
+---------------------------------------------------------------------------
+-- Named orderings. Control+Tab opens the list for the effect the cursor
+-- is in (or on); Control+Tab or Escape closes it. Enter makes the focused
+-- ordering active, Control+N adds a copy of the active one, F2 renames
+-- and Delete deletes. Original is always first and can't be changed.
+
+-- (Re)builds the orderings list for list_fx, focusing the named ordering.
+local function show_orderings(focus_name)
+  local coll = collection_for(list_fx)
+  local active = coll.active or orderings.ORIGINAL
+  local list = tree.new_node("root", "Orderings")
+  local index = 1
+  for i, name in ipairs(orderings.names(coll)) do
+    tree.add_child(list, tree.new_node("ordering", name, { active = name == active }))
+    if focus_name and name:lower() == focus_name:lower() then index = i end
+  end
+  cursor = { container = list, index = index }
+end
+
+local function open_orderings()
+  local fx_node = tree.focused(cursor)
+  if not (fx_node and fx_node.kind == "fx") then fx_node = tree.enclosing(cursor.container, "fx") end
+  if not fx_node then
+    speak("Not available here")
+    return
+  end
+  selection.clear(sel)
+  tree_cursor, list_kind, list_fx = cursor, "orderings", fx_node
+  show_orderings(collection_for(fx_node).active or orderings.ORIGINAL)
+  speak("Orderings for " .. fx_node.label .. ". " .. describe_focused(true))
+end
+
+-- Makes an ordering (nil for Original) active for every instance. Their
+-- branches are replaced, so a place inside the effect becomes the
+-- effect's own level.
+local function activate_ordering(name)
+  local coll = collection_for(list_fx)
+  orderings.set_active(coll, name)
+  save_collection(list_fx)
+  each_instance(list_fx, apply_active)
+  if tree.contains(list_fx, tree_cursor.container) then
+    tree_cursor = { container = list_fx, index = #list_fx.children > 0 and 1 or 0 }
+  end
+end
+
+-- Enter: make the focused ordering active and return to the tree.
+local function choose_ordering()
+  local name = tree.focused(cursor).label
+  if tree.focused(cursor).data.active then
+    close_list(name .. " already active. ")
+    return
+  end
+  activate_ordering(name)
+  close_list(name .. " active. ")
+end
+
+-- Control+N: a new, empty ordering (like Original), made active. The list
+-- stays open, focused on it.
+local function new_ordering()
+  local coll = collection_for(list_fx)
+  local name = prompt_text("New ordering", "Name for a new, empty ordering:", orderings.new_name(coll))
+  if not name then
+    speak("Cancelled")
+    return
+  end
+  local ok, reason = orderings.can_use_name(coll, name)
+  if not ok then
+    speak(reason)
+    return
+  end
+  orderings.add(coll, name, orderings.EMPTY_LAYOUT)
+  activate_ordering(name)
+  show_orderings(name)
+  speak("Created. " .. describe_focused(true))
+end
+
+-- Control+C and Control+V copy an ordering. They have their own
+-- clipboard, so parameters cut in the tree stay ready to paste.
+local ordering_clipboard
+
+local function copy_ordering()
+  local name = tree.focused(cursor).label
+  local coll = collection_for(list_fx)
+  ordering_clipboard = { name = name, text = orderings.text(coll, name), key = collection_key(list_fx.data) }
+  speak("Copied " .. name)
+end
+
+-- Pastes a copy after the focused ordering, named "<name> copy", and
+-- focuses it. Only into the same plugin's list: another plugin's
+-- parameters are different.
+local function paste_ordering()
+  if not ordering_clipboard then
+    speak("Nothing to paste")
+    return
+  end
+  if ordering_clipboard.key ~= collection_key(list_fx.data) then
+    speak("This ordering belongs to another plugin")
+    return
+  end
+  local coll = collection_for(list_fx)
+  local name = orderings.copy_name(coll, ordering_clipboard.name)
+  -- The focused item's position in the list, counting Original as 1, is
+  -- the position after it among the saved orderings.
+  orderings.add(coll, name, ordering_clipboard.text, cursor.index)
+  save_collection(list_fx)
+  show_orderings(name)
+  speak("Pasted. " .. describe_focused(true))
+end
+
+local function rename_ordering()
+  local old = tree.focused(cursor).label
+  if orderings.is_original(old) then
+    speak("Original can't be renamed")
+    return
+  end
+  local coll = collection_for(list_fx)
+  local name = prompt_text("Rename ordering", "New name:", old)
+  if not name then
+    speak("Cancelled")
+    return
+  end
+  if name:lower() ~= old:lower() then
+    local ok, reason = orderings.can_use_name(coll, name)
+    if not ok then
+      speak(reason)
+      return
+    end
+  elseif name == "" then
+    speak("Cancelled")
+    return
+  end
+  orderings.rename(coll, old, name)
+  save_collection(list_fx)
+  show_orderings(name)
+  speak(describe_focused(true))
+end
+
+-- Delete asks first: press Delete again to confirm. Deleting the active
+-- ordering makes Original active.
+local pending_ordering_delete
+
+local function delete_ordering()
+  local node = tree.focused(cursor)
+  if orderings.is_original(node.label) then
+    speak("Original can't be deleted")
+    return
+  end
+  if pending_ordering_delete ~= node then
+    pending_ordering_delete = node
+    speak("Delete ordering " .. node.label .. "? Press Delete again to confirm")
+    return
+  end
+  pending_ordering_delete = nil
+  local coll = collection_for(list_fx)
+  local old_index = cursor.index
+  orderings.remove(coll, node.label)
+  save_collection(list_fx)
+  if node.data.active then activate_ordering(nil) end
+  -- Focus what took its place, or the new last item.
+  local names = orderings.names(coll)
+  show_orderings(names[math.min(old_index, #names)])
+  speak("Deleted " .. node.label .. ". " .. describe_focused(true))
+end
+
+-- Keys in the orderings list. Returns true when the key was used; other
+-- keys only move through the list.
+local function handle_orderings_key(code, plain, ctrl_only)
+  if code ~= KEY.DELETE then pending_ordering_delete = nil end
+  if (plain and code == KEY.ESCAPE) or (ctrl_only and code == KEY.TAB) then
+    close_list("Orderings closed. ")
+  elseif plain and code == KEY.ENTER then
+    choose_ordering()
+  elseif ctrl_only and code == KEY.CTRL_N then
+    new_ordering()
+  elseif ctrl_only and code == KEY.CTRL_C then
+    copy_ordering()
+  elseif ctrl_only and code == KEY.CTRL_V then
+    paste_ordering()
+  elseif ctrl_only and code == KEY.CTRL_X then
+    speak("Not available here")
+  elseif plain and code == KEY.F2 then
+    rename_ordering()
+  elseif plain and code == KEY.DELETE then
+    delete_ordering()
+  else
+    return false
+  end
+  return true
 end
 
 -- Value keys act only on a focused parameter or setting, and speak the
 -- new value. A missing parameter (from a saved layout) has no value.
 local function value_target()
   local node = tree.focused(cursor)
-  if not node or not tree.is_leaf(node) then return nil end
+  if not node or not (node.kind == "param" or node.kind == "setting") then return nil end
   if node.data.missing then
     speak("missing")
     return nil
@@ -527,7 +780,7 @@ end
 -- Control+T: back to the effect's own level, landing on the top branch
 -- that holds the focus, as pressing Left repeatedly would.
 local function to_effect_level()
-  local fx_node = not in_settings() and tree.enclosing(cursor.container, "fx")
+  local fx_node = not in_list() and tree.enclosing(cursor.container, "fx")
   if not fx_node then
     speak("Not available here")
     return
@@ -593,10 +846,19 @@ local function handle_key(code, cap)
   if plain_move then selection.clear(sel) end
 
   local vertical = code == KEY.UP or code == KEY.DOWN
-  local selecting = not in_settings()
+  local selecting = not in_list()
 
-  if (code == KEY.ESCAPE or code == KEY.F12) and plain and in_settings() then
-    close_settings()
+  -- In the orderings list, only its own keys and movement work.
+  if list_kind == "orderings" then
+    if code == KEY.TAB and ctrl_only and not tab_is_down() then return true end
+    if handle_orderings_key(code, plain, ctrl_only) then return true end
+    if not (plain_move or (ctrl_only and to_end ~= nil)) then return true end
+  end
+
+  if (code == KEY.ESCAPE or code == KEY.F12) and plain and list_kind == "settings" then
+    close_list("Settings closed. ")
+  elseif ctrl_only and code == KEY.TAB and not in_list() then
+    if tab_is_down() then open_orderings() end
   elseif code == KEY.ESCAPE and plain and selection.count(sel) > 0 then
     selection.clear(sel)
     speak("Selection cleared")
@@ -668,7 +930,7 @@ local function handle_key(code, cap)
     enter()
   elseif code == KEY.LEFT then
     if tree.leave(cursor) then speak_focused(false) end
-  elseif code == KEY.F5 and not in_settings() then
+  elseif code == KEY.F5 and not in_list() then
     refresh()
   elseif code == KEY.F2 then
     rename()

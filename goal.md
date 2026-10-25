@@ -78,7 +78,7 @@ Version 0.9 used two trees. From here on there is only one tree, and organizing 
 - Branches the user creates always sit at the top of the effect, ahead of the unplaced parameters. Sorting and filtering never move them.
 - Cutting and pasting into a chosen position only happens inside branches the user creates. The default branch is never rearranged by hand.
 - Workflow: filter and/or sort to bring a group together, select the whole group, cut it, create a branch (focus moves to it), move into it, and paste.
-- Selection works like a standard Windows list: Shift with the arrows extends a selection, Control with the arrows moves without changing it, and Control+Space toggles the focused item. Control+A selects every parameter at the current level, skipping branches.
+- Selection works like a standard Windows list: Shift with the arrows extends a selection, Control with the arrows moves without changing it, and Shift+Space toggles the focused item. Control+A selects every parameter at the current level, skipping branches.
 - Value changes: Page Up and Page Down make small steps, Shift+Page Up and Shift+Page Down make large steps, and Control+Page Up and Control+Page Down go to the maximum and minimum. Page Up and Page Down are never swapped.
 - Later ideas: a "start over" command for an effect's organization, and a list of named organizations to choose from, add to, or delete from.
 

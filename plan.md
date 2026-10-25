@@ -171,7 +171,7 @@ Decisions from the discussion of 2026-10-25. Every key here should later be rede
 
 ### Selection
 
-- Standard Windows behaviour: Shift+Up and Shift+Down extend a contiguous selection; Shift+Home and Shift+End extend to the ends (following the "Home and End" setting); Control+Up and Control+Down move without changing the selection; Control+Space toggles the focused item; Control+A selects every parameter (leaf) at the current level, skipping branches. A plain arrow clears the selection.
+- Standard Windows behaviour: Shift+Up and Shift+Down extend a contiguous selection; Shift+Home and Shift+End extend to the ends (following the "Home and End" setting); Control+Up and Control+Down move without changing the selection; Shift+Space toggles the focused item (Control+Space doesn't reach the script; OSARA uses it for play and pause); Control+A selects every parameter (leaf) at the current level, skipping branches. A plain arrow clears the selection.
 - A selection stays within one level.
 - Cut and paste act on the whole selection. Pasted items keep the order they had in the view when they were cut.
 - Speech: "selected" on landing on a selected item, the count when the selection changes, and counts on cut and paste ("3 pasted into frequency").
@@ -184,9 +184,9 @@ Decisions from the discussion of 2026-10-25. Every key here should later be rede
 - Page Up and Page Down are never swapped by the "Home and End" setting, which now affects navigation only.
 - The settings list uses the same keys.
 
-### Key spike needed
+### Key spike (2026-10-25)
 
-Confirm that these reach the script: Control+Up, Control+Down, Control+Space, Control+A (code 1), Control+F (6), Control+G (7), Control+R (18), Shift+Page Up, Shift+Page Down, Control+Page Up, Control+Page Down. Control+R is REAPER's record shortcut, so check that REAPER doesn't act on it while the script's window has focus.
+These reach the script: Control+Up, Control+Down, Control+A (code 1), Control+F (6), Control+G (7), Control+R (18), Shift+Page Up, Shift+Page Down, Control+Page Up, Control+Page Down, Space and Shift+Space (32 with the Shift flag). Control+Space never arrived.
 
 ### Later
 

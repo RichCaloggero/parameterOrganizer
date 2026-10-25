@@ -10,7 +10,8 @@ local K = {
   HOME = 6647396, END = 1752132965, PAGE_UP = 1885828464, PAGE_DOWN = 1885824110,
   F2 = 26162, F5 = 26165, F12 = 6697266, ESCAPE = 27, DELETE = 6579564,
   -- As Control+letter arrives:
-  CTRL_N = 14, F = 6, G = 7, R = 18, V = 22, X = 24,
+  CTRL_N = 14, A = 1, F = 6, G = 7, R = 18, V = 22, X = 24,
+  SPACE = 32,
 }
 local CTRL, SHIFT = 4, 8
 
@@ -39,11 +40,26 @@ local keys = {
   { K.LEFT }, { K.V, CTRL },               -- at the effect's level: unplaced again
   { K.X, CTRL }, { K.END }, { K.RIGHT },   -- cut it once more, up to frequency, into it
   { K.V, CTRL },                           -- placed, for session 2
+  -- Selection: move Rate and Depth together into a new branch, and on.
+  { K.LEFT }, { K.V, CTRL },               -- unplace Rate again: two unplaced now
+  { K.A, CTRL }, { K.X, CTRL },            -- select both parameters, cut them
+  { K.CTRL_N, CTRL }, { K.RIGHT },         -- new branch "both", into it
+  { K.V, CTRL },                           -- 2 pasted into both
+  { K.LEFT }, { K.UP, SHIFT },             -- both, then extend up to frequency
+  { K.X, CTRL },                           -- refused: branches are selected
+  { K.ESCAPE },                            -- clears the selection, doesn't quit
+  { K.DOWN }, { K.RIGHT },                 -- both, into it
+  { K.SPACE, SHIFT },                      -- select Rate
+  { K.DOWN, CTRL }, { K.SPACE, SHIFT },    -- Depth, keeping Rate selected; select Depth
+  { K.X, CTRL },                           -- 2 cut
+  { K.LEFT }, { K.END, CTRL }, { K.RIGHT }, -- frequency, into it
+  { K.V, CTRL },                           -- 2 pasted into frequency, for session 2
+  { K.LEFT },
   { K.F12 }, { K.PAGE_DOWN }, { K.ESCAPE }, -- change a setting
   { K.F5 },                                -- refresh keeps the place
   { K.ESCAPE },                            -- quit
 }
-local answers = { "frequency", "Q", "Q factor", "dep", "Mix depth", "" }
+local answers = { "frequency", "Q", "Q factor", "dep", "Mix depth", "", "both" }
 
 -- Session 2: the second track's Phaser is a new instance of the same plugin.
 local keys_session2 = {

@@ -21,6 +21,7 @@ local settings_lib = require("settings")
 local organizer = require("organizer")
 local layout = require("layout")
 local storage = require("storage")
+local selection = require("selection")
 
 local MOD_CTRL, MOD_SHIFT, MOD_ALT = 4, 8, 16
 
@@ -28,9 +29,9 @@ local KEY = {
   UP = 30064, DOWN = 1685026670, LEFT = 1818584692, RIGHT = 1919379572,
   HOME = 6647396, END = 1752132965,
   PAGE_UP = 1885828464, PAGE_DOWN = 1885824110,
-  ENTER = 13, F2 = 26162, F5 = 26165, F12 = 6697266, ESCAPE = 27,
+  ENTER = 13, SPACE = 32, F2 = 26162, F5 = 26165, F12 = 6697266, ESCAPE = 27,
   DELETE = 6579564,
-  CTRL_C = 3, CTRL_F = 6, CTRL_G = 7, CTRL_N = 14, CTRL_R = 18, CTRL_V = 22, CTRL_X = 24,
+  CTRL_A = 1, CTRL_C = 3, CTRL_F = 6, CTRL_G = 7, CTRL_N = 14, CTRL_R = 18, CTRL_V = 22, CTRL_X = 24,
 }
 
 -- Settings persist in REAPER's ExtState, so they survive script updates.
@@ -49,6 +50,8 @@ local settings = settings_lib.new({
 -- list while it is open (tree_cursor then remembers the place).
 local source_root, organized_root
 local cursor, tree_cursor
+-- The selected items, all at one level of the tree.
+local sel = selection.new()
 
 -- After a dialog, speech is held until focus is back in the script's
 -- window (the loop delivers it), so it isn't lost while focus is elsewhere.
@@ -87,6 +90,20 @@ end
 
 local function describe_focused(with_state)
   return announce.describe(tree.focused(cursor), with_state, value_of)
+end
+
+-- After a move that keeps the selection (Control with the arrows), the
+-- focused item says whether it is selected.
+local function describe_with_selection(with_state)
+  local text = describe_focused(with_state)
+  if selection.is_selected(sel, tree.focused(cursor)) then text = text .. ", selected" end
+  return text
+end
+
+-- After Shift extends the selection (always including the focused item):
+-- the focused item and how many are selected.
+local function speak_selection_change()
+  speak(describe_focused(true) .. ", " .. selection.count(sel) .. " selected")
 end
 
 local function speak_focused(with_state)
@@ -157,6 +174,9 @@ end
 -- joins it, which replaces its nodes. If the focus was on one of them, it
 -- follows that parameter when the view still shows it.
 local function refresh_default_branch(fx_node)
+  -- Selected parameters there are replaced by new nodes, and the list
+  -- has changed under the user, so the selection goes.
+  if sel.container == fx_node then selection.clear(sel) end
   local focused = tree.focused(cursor)
   local count = organizer.refresh_unplaced(fx_node)
   if cursor.container ~= fx_node then return count end
@@ -272,24 +292,37 @@ local function rename()
   speak(describe_focused(true))
 end
 
--- Control+C and Control+X: remember a parameter for Control+V. A parameter
--- appears only once in the organized tree, so pasting either one moves an
--- already placed parameter; cut leaves it in place until then.
+-- Control+X (and Control+C): remember the selected parameters, or else the
+-- focused one, for Control+V. A parameter appears only once in the tree,
+-- so pasting moves it; until then it stays where it is.
+-- clipboard is a list of parameter data, in the order heard when cut.
 local clipboard
 
-local function copy(verb)
-  local node = tree.focused(cursor)
-  if not node or node.kind ~= "param" then
-    speak("Not available here")
-    return
+local function cut()
+  local nodes = selection.nodes(sel)
+  if #nodes == 0 then
+    local node = tree.focused(cursor)
+    if not node then
+      speak("Not available here")
+      return
+    end
+    nodes = { node }
   end
-  if node.data.missing then
-    speak("Missing parameters can't be copied")
-    return
+  for _, node in ipairs(nodes) do
+    if node.kind ~= "param" then
+      speak(#nodes == 1 and "Not available here" or "Only parameters can be cut")
+      return
+    elseif node.data.missing then
+      speak("Missing parameters can't be cut")
+      return
+    end
   end
-  local d = node.data
-  clipboard = { fx_guid = d.fx_guid, index = d.index, original_name = d.original_name }
-  speak(verb .. " " .. node.label)
+  clipboard = {}
+  for i, node in ipairs(nodes) do
+    local d = node.data
+    clipboard[i] = { fx_guid = d.fx_guid, index = d.index, original_name = d.original_name }
+  end
+  speak(#nodes == 1 and "Cut " .. nodes[1].label or #nodes .. " cut")
 end
 
 -- Control+V. In a branch, places the parameter there. At the effect's own
@@ -304,20 +337,37 @@ local function paste()
     speak("Nothing to paste")
     return
   end
+  selection.clear(sel)
   local unplacing = effect_level() ~= nil
-  local node, result = organizer.paste(cursor, clipboard)
-  if type(result) == "string" then
-    speak(result)
+  local container = cursor.container
+  -- Each item goes after the one before, so the group keeps its order.
+  local pasted, result, failure = 0, nil, nil
+  for _, data in ipairs(clipboard) do
+    local _, r = organizer.paste(cursor, data)
+    if type(r) == "string" then
+      failure = failure or r
+    else
+      pasted, result = pasted + 1, r
+    end
+  end
+  if pasted == 0 then
+    speak(failure)
     return
   end
   save_layout()
 
-  -- When unplacing, node is nil if the default branch's view hides it.
-  local msg = describe_focused(true)
-  if unplacing then
-    msg = "Unplaced. " .. msg
-  elseif result then
-    msg = msg .. (#result > 0 and ", moved from " .. table.concat(result, ", ") or ", moved")
+  -- When unplacing, the focus may not be on the parameter if the default
+  -- branch's view hides it.
+  local msg
+  if #clipboard > 1 then
+    msg = unplacing and pasted .. " unplaced" or pasted .. " pasted into " .. container.label
+  elseif unplacing then
+    msg = "Unplaced. " .. describe_focused(true)
+  else
+    msg = describe_focused(true)
+    if result then
+      msg = msg .. (#result > 0 and ", moved from " .. table.concat(result, ", ") or ", moved")
+    end
   end
 
   local fx_node = tree.enclosing(cursor.container, "fx")
@@ -353,6 +403,7 @@ local function delete()
   end
   pending_delete = nil
   local fx_node = tree.enclosing(cursor.container, "fx")
+  selection.clear(sel)
   tree.remove_focused(cursor)
   refresh_default_branch(fx_node)
   save_layout()
@@ -419,6 +470,7 @@ local function open_settings()
   for _, def in ipairs(settings_lib.DEFINITIONS) do
     tree.add_child(list, tree.new_node("setting", def.label, { key = def.key }))
   end
+  selection.clear(sel)
   tree_cursor = cursor
   cursor = tree.new_cursor(list)
   speak("Settings. " .. describe_focused(true))
@@ -509,8 +561,19 @@ local function handle_key(code, cap)
   -- A branch delete is confirmed only by pressing Delete again straight away.
   if code ~= KEY.DELETE then pending_delete = nil end
 
+  -- Plain movement drops the selection, as in any Windows list.
+  local plain_move = plain and (code == KEY.UP or code == KEY.DOWN or code == KEY.LEFT
+    or code == KEY.RIGHT or to_end ~= nil or (code > 32 and code < 127))
+  if plain_move then selection.clear(sel) end
+
+  local vertical = code == KEY.UP or code == KEY.DOWN
+  local selecting = not in_settings()
+
   if (code == KEY.ESCAPE or code == KEY.F12) and plain and in_settings() then
     close_settings()
+  elseif code == KEY.ESCAPE and plain and selection.count(sel) > 0 then
+    selection.clear(sel)
+    speak("Selection cleared")
   elseif code == KEY.ESCAPE and plain then
     return false
   elseif code == KEY.F12 and plain then
@@ -519,13 +582,40 @@ local function handle_key(code, cap)
     step_value(code == KEY.PAGE_UP and 1 or -1, shift_only)
   elseif (code == KEY.PAGE_UP or code == KEY.PAGE_DOWN) and ctrl_only then
     value_to_extreme(code == KEY.PAGE_UP)
+  elseif selecting and shift_only and (vertical or to_end ~= nil) then
+    -- Shift+Up, Shift+Down, Shift+Home, Shift+End: extend the selection.
+    local old_index = cursor.index
+    local moved
+    if vertical then
+      moved = (code == KEY.UP and tree.move_prev or tree.move_next)(cursor)
+    else
+      moved = (to_end and tree.move_last or tree.move_first)(cursor)
+    end
+    if moved then
+      selection.extend(sel, cursor, old_index)
+      speak_selection_change()
+    end
+  elseif selecting and shift_only and code == KEY.SPACE then
+    if tree.focused(cursor) then
+      local on = selection.toggle(sel, cursor)
+      speak(describe_focused(true) .. (on and ", " or ", not selected, ")
+        .. selection.count(sel) .. " selected")
+    end
+  elseif selecting and ctrl_only and code == KEY.CTRL_A then
+    local count = selection.select_leaves(sel, cursor)
+    speak(count == 0 and "No parameters here" or count .. " selected")
+  elseif ctrl_only and vertical then
+    -- Control+Up and Control+Down: move, keeping the selection.
+    if (code == KEY.UP and tree.move_prev or tree.move_next)(cursor) then
+      speak(describe_with_selection(true))
+    end
   elseif to_end ~= nil and ctrl_only then
     local move = to_end and tree.move_last or tree.move_first
-    if move(cursor) then speak_focused(true) end
+    if move(cursor) then speak(describe_with_selection(true)) end
   elseif ctrl_only and code == KEY.CTRL_N then
     create_branch()
   elseif ctrl_only and (code == KEY.CTRL_X or code == KEY.CTRL_C) then
-    copy("Cut")
+    cut()
   elseif ctrl_only and code == KEY.CTRL_V then
     paste()
   elseif ctrl_only and code == KEY.CTRL_F then
@@ -537,7 +627,7 @@ local function handle_key(code, cap)
   elseif code == KEY.DELETE and plain then
     delete()
   elseif not plain then
-    -- Other modified keys (selection) arrive in a later step.
+    -- Other modified keys do nothing.
   elseif code == KEY.ENTER then
     type_value()
   elseif code == KEY.UP then

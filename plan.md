@@ -169,6 +169,13 @@ Decisions from the discussion of 2026-10-25. Every key here should later be rede
 - Revert (Control+R): original order, no filter.
 - Sort and filter are views: they change nothing saved, so they need no undo.
 
+### Home and End stops
+
+- On a level that holds both branches and parameters (an effect's own level, once it has branches), there are three stops: the first item, the first parameter, and the last item.
+- The key that goes up (End, with the "Home and End" setting swapped) moves to the nearest stop above the focus; the key that goes down (Home, swapped) moves to the nearest stop below it.
+- A level without both kinds has no middle stop, so Home and End work as before.
+- Control+Home and Control+End always go to the first or last item, following the same setting.
+
 ### Selection
 
 - Standard Windows behaviour: Shift+Up and Shift+Down extend a contiguous selection; Shift+Home and Shift+End extend to the ends (following the "Home and End" setting); Control+Up and Control+Down move without changing the selection; Shift+Space toggles the focused item (Control+Space doesn't reach the script; OSARA uses it for play and pause); Control+A selects every parameter (leaf) at the current level, skipping branches. A plain arrow clears the selection.
@@ -186,7 +193,7 @@ Decisions from the discussion of 2026-10-25. Every key here should later be rede
 
 ### Key spike (2026-10-25)
 
-These reach the script: Control+Up, Control+Down, Control+A (code 1), Control+F (6), Control+G (7), Control+R (18), Shift+Page Up, Shift+Page Down, Control+Page Up, Control+Page Down, Space and Shift+Space (32 with the Shift flag). Control+Space never arrived.
+These reach the script: Control+Up, Control+Down, Control+A (code 1), Control+F (6), Control+G (7), Control+R (18), Shift+Page Up, Shift+Page Down, Control+Page Up, Control+Page Down, Space and Shift+Space (32 with the Shift flag), Control+Home and Control+End (the Home and End codes with the Control flag). Control+Space never arrived.
 
 ### Later
 

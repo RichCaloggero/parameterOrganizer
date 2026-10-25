@@ -33,7 +33,7 @@ function M.serialize(fx_node)
       if child.kind == "branch" then
         lines[#lines + 1] = table.concat({ "B", depth, clean(child.label) }, "\t")
         add(child, depth + 1)
-      elseif child.kind == "param" then
+      elseif child.kind == "param" and not child.data.unplaced then
         local d = child.data
         lines[#lines + 1] = table.concat(
           { "P", depth, d.index, clean(d.original_name), clean(d.user_label) }, "\t")
@@ -104,6 +104,7 @@ function M.apply(fx_node, text, names)
       node.label = organizer.param_label(node)
     end
   end
+  organizer.refresh_unplaced(fx_node)
   return true
 end
 

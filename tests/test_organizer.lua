@@ -8,7 +8,8 @@ local function source(spec)
     local track = tree.add_child(root, tree.new_node("track", t.label, { guid = t.guid }))
     for _, f in ipairs(t.fx) do
       local fx = tree.add_child(track, tree.new_node("fx", f.label, { guid = f.guid }))
-      tree.add_child(fx, tree.new_node("param", "Gain", { index = 0 }))
+      tree.add_child(fx, tree.new_node("param", "Gain",
+        { fx_guid = f.guid, index = 0, original_name = "Gain" }))
     end
   end
   return root
@@ -28,9 +29,10 @@ local PROJECT = {
   { label = "Track 2", guid = "T2", fx = { { label = "Verb", guid = "F3" } } },
 }
 
-test("organized tree mirrors tracks and effects, without parameters", function()
+test("organized tree mirrors tracks and effects, with unplaced parameters", function()
   local organized = organizer.sync(nil, source(PROJECT))
-  check_equal(outline(organized), "Track 1(Phaser EQ) Track 2(Verb)")
+  check_equal(outline(organized), "Track 1(Phaser(Gain) EQ(Gain)) Track 2(Verb(Gain))")
+  check_equal(organized.children[1].children[1].children[1].data.unplaced, true, "marked unplaced")
 end)
 
 test("branches only inside an effect", function()
@@ -43,14 +45,15 @@ test("branches only inside an effect", function()
   check_equal(organizer.can_create_branch(c), true, "inside an effect")
 end)
 
-test("creating branches inside an empty effect, then beside each other", function()
+test("branches go ahead of the unplaced parameters, in the order created", function()
   local organized = organizer.sync(nil, source(PROJECT))
   local c = tree.new_cursor(organized)
   tree.enter(c)
-  tree.enter(c)
+  tree.enter(c)   -- focus on the unplaced Gain
   organizer.create_branch(c, "frequency")
+  tree.move_last(c)
   organizer.create_branch(c, "Q")
-  check_equal(outline(organized), "Track 1(Phaser(frequency Q) EQ) Track 2(Verb)")
+  check_equal(outline(organized), "Track 1(Phaser(frequency Q Gain) EQ(Gain)) Track 2(Verb(Gain))")
   check_equal(tree.focused(c).label, "Q")
 end)
 
@@ -63,7 +66,7 @@ test("nested branches", function()
   tree.enter(c)
   check_equal(organizer.can_create_branch(c), true, "inside a branch")
   organizer.create_branch(c, "min")
-  check_equal(outline(organized), "Track 1(Phaser(frequency(min)) EQ) Track 2(Verb)")
+  check_equal(outline(organized), "Track 1(Phaser(frequency(min) Gain) EQ(Gain)) Track 2(Verb(Gain))")
 end)
 
 test("only branches and parameters can be renamed", function()
@@ -85,7 +88,8 @@ test("sync keeps branches, follows renames and order, adds and removes", functio
   })
   organizer.sync(organized, changed)
 
-  check_equal(outline(organized), "Track 2 Drums(Verb) Track 1(Phaser(frequency) Comp)")
+  check_equal(outline(organized),
+    "Track 2 Drums(Verb(Gain)) Track 1(Phaser(frequency Gain) Comp(Gain))")
   check_equal(organized.children[2].children[1], phaser, "same phaser node kept")
   check_equal(phaser.parent, organized.children[2], "parent link")
 end)
@@ -116,7 +120,27 @@ test("paste places a parameter with its autolabel", function()
   check_equal(node.label, "left")
   check_equal(moved, nil, "not a move")
   check_equal(tree.focused(c), node, "focused")
-  check_equal(outline(organized), "Track 1(Phaser(Q(attack(left))) EQ) Track 2(Verb)")
+  check_equal(outline(organized),
+    "Track 1(Phaser(Q(attack(left)) Gain) EQ(Gain)) Track 2(Verb(Gain))")
+end)
+
+test("pasting an unplaced parameter takes it out of the default branch", function()
+  local organized, c = phaser_with_branches()
+  organizer.paste(c, param_data(0, "Gain"))
+  check_equal(outline(organized), "Track 1(Phaser(Q(attack(Gain))) EQ(Gain)) Track 2(Verb(Gain))")
+end)
+
+test("pasting at the effect's own level returns a parameter to unplaced", function()
+  local organized, c = phaser_with_branches()
+  organizer.paste(c, param_data(0, "Gain"))
+  tree.leave(c)
+  tree.leave(c)   -- the Phaser's own level, focus on Q
+  local node, moved = organizer.paste(c, param_data(0, "Gain"))
+  check_equal(table.concat(moved, ", "), "Q, attack")
+  check_equal(node.data.unplaced, true)
+  check_equal(tree.focused(c), node, "focused")
+  check_equal(outline(organized), "Track 1(Phaser(Q(attack) Gain) EQ(Gain)) Track 2(Verb(Gain))")
+  check_equal(select(2, organizer.paste(c, param_data(0, "Gain"))), "Already unplaced")
 end)
 
 test("paste is refused outside an effect and in another effect", function()
@@ -135,10 +159,13 @@ test("pasting a placed parameter again moves it and reports where from", functio
   organizer.paste(c, param_data(4, "left Q attack"))
   tree.leave(c)
   tree.leave(c)   -- back at the Phaser's contents, focus on Q
+  organizer.create_branch(c, "release")
+  tree.enter(c)
   local node, moved = organizer.paste(c, param_data(4, "left Q attack"))
   check_equal(table.concat(moved, ", "), "Q, attack")
-  check_equal(node.label, "left Q attack", "no branches above any more")
-  check_equal(outline(organized), "Track 1(Phaser(Q(attack) left Q attack) EQ) Track 2(Verb)")
+  check_equal(node.label, "left Q attack", "Q and attack are no longer above it")
+  check_equal(outline(organized),
+    "Track 1(Phaser(Q(attack) release(left Q attack) Gain) EQ(Gain)) Track 2(Verb(Gain))")
 end)
 
 test("renaming a branch relabels the parameters inside", function()
@@ -185,18 +212,19 @@ local function container_source()
   local track = tree.add_child(root, tree.new_node("track", "Bus", { guid = "T" }))
   local c1 = tree.add_child(track, tree.new_node("fx", "Container", { guid = "C1", fx = 0 }))
   local eq = tree.add_child(c1, tree.new_node("fx", "ReaEQ", { guid = "EQ", fx = 100 }))
-  tree.add_child(eq, tree.new_node("param", "Gain", { fx_guid = "EQ", index = 0 }))
+  tree.add_child(eq, tree.new_node("param", "Gain", { fx_guid = "EQ", index = 0, original_name = "Gain" }))
   local c2 = tree.add_child(c1, tree.new_node("fx", "Inner", { guid = "C2", fx = 101 }))
   local comp = tree.add_child(c2, tree.new_node("fx", "ReaComp", { guid = "COMP", fx = 200 }))
-  tree.add_child(comp, tree.new_node("param", "Ratio", { fx_guid = "COMP", index = 0 }))
-  tree.add_child(c2, tree.new_node("param", "Bypass", { fx_guid = "C2", index = 0 }))
-  tree.add_child(c1, tree.new_node("param", "Bypass", { fx_guid = "C1", index = 0 }))
+  tree.add_child(comp, tree.new_node("param", "Ratio", { fx_guid = "COMP", index = 0, original_name = "Ratio" }))
+  tree.add_child(c2, tree.new_node("param", "Bypass", { fx_guid = "C2", index = 0, original_name = "Bypass" }))
+  tree.add_child(c1, tree.new_node("param", "Bypass", { fx_guid = "C1", index = 0, original_name = "Bypass" }))
   return root
 end
 
 test("containers are mirrored with their effects, at any depth", function()
   local organized = organizer.sync(nil, container_source())
-  check_equal(outline(organized), "Bus(Container(ReaEQ Inner(ReaComp)))")
+  check_equal(outline(organized),
+    "Bus(Container(ReaEQ(Gain) Inner(ReaComp(Ratio) Bypass) Bypass))")
 end)
 
 test("a container's own parameter and its effects' parameters stay apart", function()
@@ -206,23 +234,30 @@ test("a container's own parameter and its effects' parameters stay apart", funct
   tree.enter(c)            -- inside: ReaEQ
   tree.move_next(c)        -- Inner
   tree.enter(c)            -- inside Inner: ReaComp
-  tree.enter(c)            -- inside ReaComp: empty
+  tree.enter(c)            -- inside ReaComp: the unplaced Ratio
+  organizer.create_branch(c, "dyn")
+  tree.enter(c)
   organizer.paste(c, { fx_guid = "COMP", index = 0, original_name = "Ratio" })
+  tree.leave(c)
   tree.leave(c)            -- ReaComp, inside Inner
+  organizer.create_branch(c, "b")
+  tree.enter(c)
   -- Inner's own Bypass has the same index as ReaComp's Ratio: not confused.
   local node, moved = organizer.paste(c, { fx_guid = "C2", index = 0, original_name = "Bypass" })
   check_equal(moved, nil, "a new placement, not a move")
-  check_equal(outline(organized), "Bus(Container(ReaEQ Inner(ReaComp(Ratio) Bypass)))")
-  check_equal(node.parent.label, "Inner")
+  check_equal(outline(organized),
+    "Bus(Container(ReaEQ(Gain) Inner(ReaComp(dyn(Ratio)) b(Bypass)) Bypass))")
+  check_equal(node.parent.label, "b")
 end)
 
-test("in a container, new items go after its effects", function()
+test("in a container, new branches go after its effects", function()
   local organized = organizer.sync(nil, container_source())
   local c = tree.new_cursor(organized)
   tree.enter(c)
   tree.enter(c)            -- focus on ReaEQ, the first effect in the container
   organizer.create_branch(c, "mix")
-  check_equal(outline(organized), "Bus(Container(ReaEQ Inner(ReaComp) mix))")
+  check_equal(outline(organized),
+    "Bus(Container(ReaEQ(Gain) Inner(ReaComp(Ratio) Bypass) mix Bypass))")
 end)
 
 test("sync keeps a container's branches after its effects", function()
@@ -230,5 +265,50 @@ test("sync keeps a container's branches after its effects", function()
   local container = organized.children[1].children[1]
   tree.add_child(container, tree.new_node("branch", "mix"))
   organizer.sync(organized, container_source())
-  check_equal(outline(organized), "Bus(Container(ReaEQ Inner(ReaComp) mix))")
+  check_equal(outline(organized),
+    "Bus(Container(ReaEQ(Gain) Inner(ReaComp(Ratio) Bypass) mix Bypass))")
+end)
+
+---------------------------------------------------------------------------
+-- The default branch's view
+
+local function eq_source(names)
+  local root = tree.new_node("root", "")
+  local track = tree.add_child(root, tree.new_node("track", "T", { guid = "T" }))
+  local fx = tree.add_child(track, tree.new_node("fx", "EQ", { guid = "EQ" }))
+  for i, name in ipairs(names) do
+    tree.add_child(fx, tree.new_node("param", name, { fx_guid = "EQ", index = i - 1, original_name = name }))
+  end
+  return root
+end
+
+test("sorting and filtering the default branch, then reverting", function()
+  local organized = organizer.sync(nil, eq_source({ "band10 gain", "Band2 Freq", "band1 gain", "Output" }))
+  local eq = organized.children[1].children[1]
+  eq.view.sorted = true
+  organizer.refresh_unplaced(eq)
+  check_equal(outline(eq), "band1 gain Band2 Freq band10 gain Output")
+  eq.view.filter = "GAIN"
+  check_equal(organizer.refresh_unplaced(eq), 2, "count shown")
+  check_equal(outline(eq), "band1 gain band10 gain")
+  eq.view.sorted, eq.view.filter = false, nil
+  organizer.refresh_unplaced(eq)
+  check_equal(outline(eq), "band10 gain Band2 Freq band1 gain Output")
+end)
+
+test("sorting and filtering leave the branches alone", function()
+  local organized = organizer.sync(nil, eq_source({ "b", "a" }))
+  local eq = organized.children[1].children[1]
+  tree.add_child(eq, tree.new_node("branch", "zz"), 1)
+  eq.view.sorted, eq.view.filter = true, "x"
+  organizer.refresh_unplaced(eq)
+  check_equal(outline(eq), "zz")
+end)
+
+test("the view survives a refresh from the project", function()
+  local organized = organizer.sync(nil, eq_source({ "b", "a" }))
+  local eq = organized.children[1].children[1]
+  eq.view.sorted = true
+  organizer.sync(organized, eq_source({ "b", "a", "c" }))
+  check_equal(outline(eq), "a b c")
 end)

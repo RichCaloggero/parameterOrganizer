@@ -4,7 +4,7 @@ local layout = require("layout")
 local storage = require("storage")
 
 -- An organized effect with: Q > attack > left (own name "L") and right,
--- then Mix directly inside the effect.
+-- then Out > Mix.
 local function organized_phaser()
   local fx = tree.new_node("fx", "Phaser", { guid = "F1", plugin_key = "JS: phaser", track = "t", fx = 0 })
   local c = tree.new_cursor(fx)
@@ -17,6 +17,8 @@ local function organized_phaser()
   organizer.paste(c, { fx_guid = "F1", index = 1, original_name = "right Q attack" })
   tree.leave(c)
   tree.leave(c)
+  organizer.create_branch(c, "Out")
+  tree.enter(c)
   organizer.paste(c, { fx_guid = "F1", index = 2, original_name = "Mix" })
   return fx
 end
@@ -37,7 +39,7 @@ test("a layout saves and loads back the same tree", function()
   local text = layout.serialize(organized_phaser())
   local other = tree.new_node("fx", "Phaser", { guid = "F2", track = "t2", fx = 5 })
   check_equal(layout.apply(other, text, NAMES), true)
-  check_equal(outline(other), "Q(attack(L right)) Mix")
+  check_equal(outline(other), "Q(attack(L right)) Out(Mix)")
 end)
 
 test("loaded parameters belong to the instance they are loaded into", function()
@@ -56,16 +58,16 @@ test("a reordered plugin: parameters are found again by name", function()
   local text = layout.serialize(organized_phaser())
   local other = tree.new_node("fx", "Phaser", { guid = "F2" })
   layout.apply(other, text, { [0] = "Mix", [1] = "left Q attack", [2] = "right Q attack" })
-  check_equal(outline(other), "Q(attack(L right)) Mix")
+  check_equal(outline(other), "Q(attack(L right)) Out(Mix)")
   check_equal(other.children[1].children[1].children[1].data.index, 1, "left moved to 1")
-  check_equal(other.children[2].data.index, 0, "Mix moved to 0")
+  check_equal(other.children[2].children[1].data.index, 0, "Mix moved to 0")
 end)
 
 test("a parameter the plugin no longer has is kept, marked missing", function()
   local text = layout.serialize(organized_phaser())
   local other = tree.new_node("fx", "Phaser", { guid = "F2" })
   layout.apply(other, text, { [0] = "left Q attack", [1] = "right Q attack" })
-  check_equal(outline(other), "Q(attack(L right)) Mix!")
+  check_equal(outline(other), "Q(attack(L right)) Out(Mix!)")
   check_equal(organizer.find_placed(other, 2), nil, "a missing parameter doesn't count as placed")
   -- Saving again keeps it, so the layout isn't lost.
   check_equal(layout.serialize(other):find("Mix", 1, true) ~= nil, true)
@@ -94,7 +96,22 @@ end)
 test("text that isn't a layout changes nothing", function()
   local fx = organized_phaser()
   check_equal(layout.apply(fx, "something else\n", NAMES), false)
-  check_equal(outline(fx), "Q(attack(L right)) Mix")
+  check_equal(outline(fx), "Q(attack(L right)) Out(Mix)")
+end)
+
+test("a 0.9 layout's parameters placed directly in the effect become unplaced", function()
+  local text = "ParameterOrganizer layout 1\nplugin\tJS: phaser\n" ..
+    "B\t0\tQ\nP\t1\t0\tleft Q attack\t\nP\t0\t2\tMix\t\nP\t0\t7\tGone\t\n"
+  local fx = tree.new_node("fx", "Phaser", { guid = "F2" })
+  fx.source_params = {
+    { fx_guid = "F2", index = 0, original_name = "left Q attack" },
+    { fx_guid = "F2", index = 1, original_name = "right Q attack" },
+    { fx_guid = "F2", index = 2, original_name = "Mix" },
+  }
+  layout.apply(fx, text, NAMES)
+  -- Gone is missing, so it stays where it was saved.
+  check_equal(outline(fx), "Q(left attack) Gone! right Q attack Mix")
+  check_equal(layout.serialize(fx):find("Mix", 1, true), nil, "Mix no longer saved")
 end)
 
 test("layout file names are safe and distinct", function()

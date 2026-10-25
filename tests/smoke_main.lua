@@ -11,7 +11,7 @@ local K = {
   F2 = 26162, F5 = 26165, F12 = 6697266, ESCAPE = 27, DELETE = 6579564,
   TAB = 9, ENTER = 13,
   -- As Control+letter arrives:
-  CTRL_N = 14, A = 1, C = 3, F = 6, K = 11, G = 7, R = 18, T = 20, V = 22, X = 24,
+  CTRL_N = 14, A = 1, B = 2, C = 3, F = 6, K = 11, G = 7, R = 18, T = 20, V = 22, X = 24,
   SPACE = 32,
 }
 local CTRL, SHIFT = 4, 8
@@ -79,6 +79,9 @@ local keys = {
   { K.T, CTRL },                           -- back to the Phaser's level, on both
   { K.T, CTRL },                           -- already there
   { K.CTRL_N, CTRL },                      -- "both" again: already exists
+  { K.B, CTRL },                           -- inside the Phaser: bypassed
+  { K.LEFT },                              -- Phaser says bypassed
+  { K.B, CTRL }, { K.RIGHT },              -- back in use, silently; back in
   -- Named orderings.
   { K.TAB, CTRL },                         -- list for Phaser: Ordering 1 active
   { K.CTRL_N, CTRL },                      -- "Spare": empty, active, list stays open
@@ -101,9 +104,12 @@ local answers = { "frequency", "Q", "Q factor", "dep", "Mix depth", "", "both", 
 -- Session 2: the second track's Phaser is a new instance of the same plugin.
 local keys_session2 = {
   { K.RIGHT }, { K.RIGHT },                -- Phaser, then its saved branch
+  { K.B, CTRL },                           -- bypass this Phaser only
   { K.RIGHT }, { K.LEFT }, { K.LEFT }, { K.LEFT },
   { K.DOWN },                              -- Track 2
   { K.RIGHT }, { K.RIGHT }, { K.RIGHT },   -- its Phaser has the same branch
+  { K.B, CTRL }, { K.B, CTRL },            -- bypass this one too, then not
+  { K.LEFT }, { K.UP }, { K.DOWN },        -- frequency doesn't say bypassed
   { K.ESCAPE },
 }
 
@@ -118,6 +124,8 @@ local tracks = {
 local master = { name = "", number = -1, guid = "{M}", fx = {} }
 
 local clock, key_index, answer_index, next_key_at
+-- REAPER's current (last touched) track, where the script starts.
+local touched
 local spoken, deferred, extstate = {}, {}, {}
 
 local function param(t, fx, p) return t.fx[fx + 1], p + 1 end
@@ -136,12 +144,15 @@ reaper = {
     return true, answers[answer_index] or ""
   end,
   GetMasterTrack = function() return master end,
+  GetLastTouchedTrack = function() return touched end,
   CountTracks = function() return #tracks end,
   GetTrack = function(_, i) return tracks[i + 1] end,
   GetTrackGUID = function(t) return t.guid end,
   GetMediaTrackInfo_Value = function(t) return t.number end,
   GetSetMediaTrackInfo_String = function(t) return true, t.name end,
   TrackFX_GetCount = function(t) return #t.fx end,
+  TrackFX_GetEnabled = function(t, fx) return not t.fx[fx + 1].bypassed end,
+  TrackFX_SetEnabled = function(t, fx, on) t.fx[fx + 1].bypassed = not on end,
   TrackFX_GetFXName = function(t, fx) return true, t.fx[fx + 1].name end,
   TrackFX_GetFXGUID = function(t, fx) return t.fx[fx + 1].guid end,
   TrackFX_GetNumParams = function(t, fx) return #t.fx[fx + 1].params end,
@@ -168,7 +179,8 @@ reaper = {
 
 gfx = {
   mouse_cap = 0,
-  init = function() end,
+  -- The screen reader reads the window's name: record it with the speech.
+  init = function(title) spoken[#spoken + 1] = "[window] " .. title end,
   quit = function() end,
   getchar = function(flag)
     if flag == 65536 then return 2 end   -- window state: focused
@@ -210,3 +222,12 @@ tracks[2] = { name = "Bass", number = 2, guid = "{T2}", fx = {
   { name = "JS: Phaser", guid = "{F2}", params = { "Rate", "Depth" }, values = { 0.7, 0.1 } },
 } }
 session(keys_session2)
+print("Bypassed:", tracks[1].fx[1].bypassed, tracks[2].fx[1].bypassed)
+
+-- Session 3: Track 2 is REAPER's current track, so the script starts there.
+print("Session 3")
+touched = tracks[2]
+session({
+  { K.RIGHT }, { K.RIGHT }, { K.RIGHT },   -- Track 2's Phaser, frequency, Rate 70%
+  { K.ESCAPE },
+})

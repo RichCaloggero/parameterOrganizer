@@ -115,6 +115,21 @@ function M.build_source_tree()
   return root
 end
 
+-- An effect's bypass state, read from REAPER each time so a change made
+-- elsewhere is heard.
+function M.is_bypassed(fx_node)
+  local d = fx_node.data
+  return not reaper.TrackFX_GetEnabled(d.track, d.fx)
+end
+
+-- Bypasses the effect, or brings it back. Returns the new state.
+function M.toggle_bypass(fx_node)
+  local d = fx_node.data
+  local bypassed = not M.is_bypassed(fx_node)
+  reaper.TrackFX_SetEnabled(d.track, d.fx, not bypassed)
+  return bypassed
+end
+
 -- The value of a parameter as the plugin displays it, such as "350 Hz".
 function M.formatted_value(node)
   local d = node.data

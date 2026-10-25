@@ -20,6 +20,13 @@ test("a parameter with no value speaks just its label", function()
   check_equal(announce.describe(node, true, function() return "" end), "left")
 end)
 
+test("a container says so after its name", function()
+  local node = tree.new_node("fx", "Chain", { is_container = true })
+  check_equal(announce.describe(node, true, value_of), "Chain container collapsed")
+  check_equal(announce.describe(node, false, value_of), "Chain container")
+  check_equal(announce.describe(tree.new_node("fx", "Phaser", {}), false, value_of), "Phaser")
+end)
+
 test("the empty position says empty", function()
   check_equal(announce.describe(nil, true, value_of), "empty")
 end)

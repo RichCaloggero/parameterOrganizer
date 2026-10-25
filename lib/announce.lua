@@ -3,6 +3,13 @@
 
 local M = {}
 
+-- An item's name as spoken: a container says so after its name, so it
+-- isn't taken for the effect inside it.
+function M.name(node)
+  if node.kind == "fx" and node.data and node.data.is_container then return node.label .. " container" end
+  return node.label
+end
+
 -- node: the focused node, or nil for the empty position.
 -- with_state: true for Up, Down, Home, End and type-ahead; false for
 --   Right and Left, which speak the item without its state.
@@ -17,8 +24,8 @@ function M.describe(node, with_state, value_of)
     return node.label .. " " .. value
   end
 
-  if with_state then return node.label .. " collapsed" end
-  return node.label
+  if with_state then return M.name(node) .. " collapsed" end
+  return M.name(node)
 end
 
 return M

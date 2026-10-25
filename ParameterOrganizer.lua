@@ -32,7 +32,7 @@ local KEY = {
   PAGE_UP = 1885828464, PAGE_DOWN = 1885824110,
   ENTER = 13, TAB = 9, SPACE = 32, F2 = 26162, F5 = 26165, F12 = 6697266, ESCAPE = 27,
   DELETE = 6579564,
-  CTRL_A = 1, CTRL_C = 3, CTRL_F = 6, CTRL_G = 7, CTRL_K = 11, CTRL_N = 14, CTRL_R = 18, CTRL_T = 20, CTRL_V = 22, CTRL_X = 24,
+  CTRL_A = 1, CTRL_B = 2, CTRL_C = 3, CTRL_F = 6, CTRL_G = 7, CTRL_K = 11, CTRL_N = 14, CTRL_R = 18, CTRL_T = 20, CTRL_V = 22, CTRL_X = 24,
 }
 
 -- With Control held, gfx.getchar reports Tab and Control+I both as 9.
@@ -110,8 +110,12 @@ local function value_of(node)
   return reaper_fx.formatted_value(node)
 end
 
+-- A bypassed effect says so after its name.
 local function describe_focused(with_state)
-  return announce.describe(tree.focused(cursor), with_state, value_of)
+  local node = tree.focused(cursor)
+  local text = announce.describe(node, with_state, value_of)
+  if node and node.kind == "fx" and reaper_fx.is_bypassed(node) then text = text .. " bypassed" end
+  return text
 end
 
 -- After a move that keeps the selection (Control with the arrows), the
@@ -289,14 +293,20 @@ local function refresh()
   speak("Refreshed. " .. describe_focused(true))
 end
 
--- The screen reader announces the window's name when it gains focus, so
--- the name is the greeting: the script speaks nothing of its own at
--- startup (which would collide with that announcement) or on closing.
-local window_title
+-- The window's title is a non-breaking space, so the screen reader has
+-- nothing to announce when the window gains focus (a plain space makes it
+-- start to say "unknown"). The script speaks the greeting itself, once,
+-- when its window first has focus: the name and the item it starts on.
+-- Nothing is spoken on closing.
+local WINDOW_TITLE = "\u{00A0}"
 
 local function open_window()
-  gfx.init(window_title, 1, 1, 0, -32000, -32000)
+  gfx.init(WINDOW_TITLE, 1, 1, 0, -32000, -32000)
 end
+
+-- The window, for js_ReaScriptAPI to give focus back to. A blank title
+-- can't be searched for, so it is noted the first time the window has focus.
+local window_hwnd
 
 -- Windows does not always return focus to the script's window after a
 -- dialog closes (it sometimes goes to REAPER's track view instead), so
@@ -309,12 +319,9 @@ local function window_has_focus()
 end
 
 local function refocus_window()
-  if reaper.JS_Window_Find and reaper.JS_Window_SetFocus then
-    local hwnd = reaper.JS_Window_Find(window_title, true)
-    if hwnd then
-      reaper.JS_Window_SetFocus(hwnd)
-      return
-    end
+  if window_hwnd and reaper.JS_Window_SetFocus then
+    reaper.JS_Window_SetFocus(window_hwnd)
+    return
   end
   -- Without js_ReaScriptAPI: a newly opened window takes focus, as it does
   -- at startup, so close the window and open it again.
@@ -817,6 +824,19 @@ local function to_effect_level()
   speak_focused(false)
 end
 
+-- Control+B: bypass the focused effect, or else the one the cursor is
+-- in, or bring it back. Only bypassing is spoken, with the effect's name,
+-- since inside a container it may not be the effect expected.
+local function toggle_bypass()
+  local node = tree.focused(cursor)
+  if not (node and node.kind == "fx") then node = not in_list() and tree.enclosing(cursor.container, "fx") end
+  if in_list() or not node then
+    speak("Not available here")
+    return
+  end
+  if reaper_fx.toggle_bypass(node) then speak(announce.name(node) .. " bypassed") end
+end
+
 -- Right: entering an effect whose default branch is filtered says so, so
 -- the hidden parameters aren't taken for missing.
 local function enter()
@@ -950,6 +970,8 @@ local function handle_key(code, cap)
     revert()
   elseif ctrl_only and code == KEY.CTRL_T then
     to_effect_level()
+  elseif ctrl_only and code == KEY.CTRL_B then
+    toggle_bypass()
   elseif code == KEY.DELETE and plain then
     delete()
   elseif not plain then
@@ -996,7 +1018,11 @@ local function loop()
     refocus_check_at = nil
     if not window_has_focus() then refocus_window() end
   end
-  deliver_held_speech(window_has_focus())
+  local has_focus = window_has_focus()
+  if has_focus and not window_hwnd and reaper.JS_Window_GetFocus then
+    window_hwnd = reaper.JS_Window_GetFocus()
+  end
+  deliver_held_speech(has_focus)
 
   reaper.defer(loop)
 end
@@ -1013,11 +1039,28 @@ if reaper.set_action_options then
   reaper.set_action_options(1 | 2)
 end
 
+-- Starts on REAPER's current track (the last touched one, which is not
+-- the same as the selection), when it has effects and so is in the tree.
+local function focus_current_track()
+  local track = reaper.GetLastTouchedTrack and reaper.GetLastTouchedTrack()
+  if not track then return end
+  local guid = reaper.GetTrackGUID(track)
+  for _, node in ipairs(organized_root.children) do
+    if node.kind == "track" and node.data.guid == guid then
+      tree.focus_node(cursor, node)
+      return
+    end
+  end
+end
+
 load_trees()
+focus_current_track()
+-- The greeting waits, like speech after a dialog, until the window has focus.
+awaiting_focus = true
 if tree.focused(cursor) then
-  window_title = "Parameter organizer"
+  speak("Parameter organizer, " .. describe_focused(false))
 else
-  window_title = "Parameter organizer, no effects in this project. F5 refreshes, Escape quits"
+  speak("Parameter organizer, no effects in this project. F5 refreshes, Escape quits")
 end
 open_window()
 reaper.atexit(gfx.quit)

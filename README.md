@@ -29,8 +29,8 @@ Run the script from your shortcut, not from the ReaScript editor. Pressing the s
 
 ## Getting started
 
-1. Press your shortcut. You hear "Parameter organizer".
-2. Use Down to reach a track, Right to go into it, Right again to go into an effect, then Up and Down to hear its parameters and their values.
+1. Press your shortcut. You hear "Parameter organizer" and the item you're on. You start on REAPER's current track (the last one you moved to or touched, even when several are selected), if it has effects; otherwise on the first track.
+2. Use Up and Down to reach a track, Right to go into it, Right again to go into an effect, then Up and Down to hear its parameters and their values.
 3. Press Control+F and type a word, such as "freq". Only the parameters containing it are left, and you hear how many match.
 4. Press Control+A to select them all, then Control+X to cut them.
 5. Press Control+N, type a branch name such as "freq", and press Enter. The new branch is placed ahead of the parameters, and you're on it.
@@ -49,6 +49,7 @@ Run the script from your shortcut, not from the ReaScript editor. Pressing the s
 - **Control+Home and Control+End:** always the first or last item.
 - **Control+T:** back to the effect's own level from anywhere inside it, landing on the branch you were in.
 - **A letter or digit:** the next item at this level starting with it.
+- **Control+B:** bypass the effect you're on or inside, or bring it back. Bypassing says the effect's name and "bypassed"; bringing it back says nothing. Inside a container, on one of its own branches or parameters, that's the container. A bypassed effect says "bypassed" after its name whenever you land on it.
 - **Control+Tab:** the named orderings for the effect you're in. See "Named orderings" below.
 - **F5:** refresh from the project, after adding, removing or moving effects.
 - **F12:** open the settings list.
@@ -149,7 +150,7 @@ On a standard keyboard, where Home is above End, open the settings list with F12
 
 ## Containers
 
-A container appears like an effect. Go into it with Right: first come the effects it holds, then your branches, then the container's own unplaced parameters. Containers inside containers work the same way.
+A container appears like an effect, with "container" after its name. Go into it with Right: first come the effects it holds, then your branches, then the container's own unplaced parameters. Containers inside containers work the same way.
 
 ## Limitations
 

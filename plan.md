@@ -2,6 +2,8 @@
 
 This plan implements goal.md as a REAPER Lua script, with decisions from the planning interview of 2026-10-24.
 
+Version 0.9 (tagged) implements the plan as written below. Work on the `dev` branch follows "After 0.9: one tree" at the end of this file, which replaces anything earlier that conflicts with it.
+
 ## Architecture
 
 This follows the pattern proven in Lo-lo's Speak FX Params suite (in this folder).
@@ -144,3 +146,49 @@ Known limit: abbreviations such as "Atk" or "L" are not matched. A synonym table
 6. Copy, cut, paste, delete and autolabel.
 7. Saving and loading.
 8. Polish: type-ahead, Home and End, refresh, and announcing missing parameters.
+
+## After 0.9: one tree
+
+Decisions from the discussion of 2026-10-25. Every key here should later be redefinable in the settings list.
+
+### Structure
+
+- There is only one tree. The source tree and the organized tree become one, and Control+Tab no longer switches trees.
+- Under each effect come the user's branches first, in the order created, then the default branch: the effect's unplaced parameters, listed directly under the effect.
+- The default branch is never rearranged by hand. Positioned paste ("after the focused item") only happens inside user branches.
+- Cut is allowed from the default branch, since that's how parameters get into branches. Pasting into the default branch returns parameters to unplaced, at their source (or sorted) position.
+- Control+N on the effect's level creates a branch at the end of the user branches (ahead of the unplaced parameters) and focuses it. Inside a user branch it works as before: after the focused item.
+
+### Sort, filter, revert (default branch only)
+
+- Sort (Control+G): natural order. Names are split into runs of digits and runs of other characters. Digit runs compare as numbers and other runs compare with case folded, so band1, band2, band10 always sort in that order. Names that compare equal (for example "band01" and "band1") keep their source order.
+- Filter (Control+F): prompts for text. Both the text and each parameter name are case folded, and any run of whitespace becomes one space, with the ends trimmed. A parameter matches if the result contains the typed text as a plain substring (no pattern characters). Words must therefore be adjacent and in typed order. Underscores and hyphens are not folded yet; revisit after testing on a real plugin.
+- Filtering searches only the default branch, not inside user branches.
+- Speak the number of matches when a filter is applied, and say "filtered" when entering an effect whose default branch is filtered.
+- The filter stays on after a paste. It clears itself only when a paste empties the filtered list, and then says "filter cleared".
+- Revert (Control+R): original order, no filter.
+- Sort and filter are views: they change nothing saved, so they need no undo.
+
+### Selection
+
+- Standard Windows behaviour: Shift+Up and Shift+Down extend a contiguous selection; Shift+Home and Shift+End extend to the ends (following the "Home and End" setting); Control+Up and Control+Down move without changing the selection; Control+Space toggles the focused item; Control+A selects every parameter (leaf) at the current level, skipping branches. A plain arrow clears the selection.
+- A selection stays within one level.
+- Cut and paste act on the whole selection. Pasted items keep the order they had in the view when they were cut.
+- Speech: "selected" on landing on a selected item, the count when the selection changes, and counts on cut and paste ("3 pasted into frequency").
+
+### Values
+
+- Page Up and Page Down: small step (keeping the rule that a step always changes the display).
+- Shift+Page Up and Shift+Page Down: large step.
+- Control+Page Up and Control+Page Down: maximum and minimum.
+- Page Up and Page Down are never swapped by the "Home and End" setting, which now affects navigation only.
+- The settings list uses the same keys.
+
+### Key spike needed
+
+Confirm that these reach the script: Control+Up, Control+Down, Control+Space, Control+A (code 1), Control+F (6), Control+G (7), Control+R (18), Shift+Page Up, Shift+Page Down, Control+Page Up, Control+Page Down. Control+R is REAPER's record shortcut, so check that REAPER doesn't act on it while the script's window has focus.
+
+### Later
+
+- "Start over": clear an effect's organization, after confirmation.
+- Named organizations per plugin type, to choose from, add to, or delete from.

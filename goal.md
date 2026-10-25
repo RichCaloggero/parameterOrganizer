@@ -64,4 +64,21 @@ Consider the previous phaser example tree. Assume the jsfx that implements the e
 - control+v pastes a parameter
 - f2 creates a branch and prompts for a branch name, or ralabels a leaf node
 
+## After version 0.9
+
+Version 0.9 used two trees. From here on there is only one tree, and organizing happens inside it.
+
+- The script starts as before: tracks, the effects on each track, and each effect's parameters in their original order. Call that list of parameters the default branch.
+- Small plugins can be used as they are; organizing is optional.
+- In the default branch only:
+    + control+g sorts the parameters in natural order, so band1, band2, band10 always sort that way and never band1, band10, band2
+    + control+f filters the parameters by a word or phrase
+    + control+r reverts to the original order with no filter
+- These keys, like the others, should later be redefinable in the settings list.
+- Branches the user creates always sit at the top of the effect, ahead of the unplaced parameters. Sorting and filtering never move them.
+- Cutting and pasting into a chosen position only happens inside branches the user creates. The default branch is never rearranged by hand.
+- Workflow: filter and/or sort to bring a group together, select the whole group, cut it, create a branch (focus moves to it), move into it, and paste.
+- Selection works like a standard Windows list: Shift with the arrows extends a selection, Control with the arrows moves without changing it, and Control+Space toggles the focused item. Control+A selects every parameter at the current level, skipping branches.
+- Value changes: Page Up and Page Down make small steps, Shift+Page Up and Shift+Page Down make large steps, and Control+Page Up and Control+Page Down go to the maximum and minimum. Page Up and Page Down are never swapped.
+- Later ideas: a "start over" command for an effect's organization, and a list of named organizations to choose from, add to, or delete from.
 

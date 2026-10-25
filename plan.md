@@ -70,7 +70,7 @@ Decision: use `reaper.GetUserInputs`, REAPER's own dialog. It needs little code 
 - Expanded and collapsed (option A): Right expands a branch and focuses its first child in one step; Left closes the current branch and focuses its parent in one step. So every item reached with Up and Down is collapsed, and "collapsed" signals that it can be entered with Right.
 - Right: enter a branch and focus its first child. An empty branch can still be entered: focus sits on an empty position inside it, speech says "empty", and Control+N or Control+V there creates its first item.
 - Left: go to the parent.
-- Home and End: first and last item at the current level.
+- Home and End: last and first item at the current level, by default. The "Home and End" setting (F12; default swapped, because Home sits below End on Rich's keyboard) reverses Home and End everywhere they are used.
 - A letter key: jump to the next item at this level starting with that letter.
 - Control+Tab: switch trees and announce which one is now active.
 - F5: rebuild from the project.
@@ -80,6 +80,9 @@ Decision: use `reaper.GetUserInputs`, REAPER's own dialog. It needs little code 
 
 - Shift+Up and Shift+Down: small step, 1% of the range.
 - Page Up and Page Down: large step, 10% of the range.
+- Shift+Home and Shift+End: with the "Home and End" setting swapped (the default), Shift+Home sets the minimum and Shift+End the maximum. The rule, like Down and Up: the lower key goes down (last item, minimum) and the upper key goes up (first item, maximum). With the setting off, both are reversed.
+- Steps always change the display: if a plain step would display the same (a choice slider such as a reverb type, or a very large range), the search continues to the next setting that displays differently. Plugins that answer "what would you display at x?" with their current display (ValhallaVintageVerb) are detected and searched by setting and reading the real display, restoring the value if nothing changes.
+- REAPER's built-in Bypass and Delta report no step sizes, so they are recognised by name among the last three parameters and treated as switches.
 - Parameters with set positions (switches, mode menus) use the step sizes the plugin reports.
 - Enter: type an exact value in the plugin's own units. The script searches for the matching setting, and falls back to 0 to 100 percent if the plugin doesn't respond well to that.
 - After every change, speak the value as the plugin displays it.
@@ -94,6 +97,14 @@ Decision: use `reaper.GetUserInputs`, REAPER's own dialog. It needs little code 
 - Delete on a parameter: return it to unplaced.
 - Delete on a branch: ask for confirmation, then return everything inside it to unplaced.
 - Track and effect levels can't be renamed, deleted, or have branches created beside them. Trying (including Control+N on an effect name) says "not available here".
+
+## Settings
+
+- F12 opens the settings list; F12 or Escape closes it and returns to the same place in the tree.
+- The list uses the tree's keys: Up, Down, Home, End and type-ahead move; Shift+Up, Shift+Down, Page Up, Page Down, Shift+Home and Shift+End change the focused setting. Each setting speaks its label and value.
+- Settings are defined in `lib/settings.lua` and stored in REAPER's persistent ExtState (section "ParameterOrganizer"), so they survive script updates.
+- Current settings: "Home and End" (default swapped).
+- Future idea (Rich): settable keyboard shortcuts in the settings list.
 
 ## Placement rules
 

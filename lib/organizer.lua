@@ -119,9 +119,10 @@ function M.can_create_branch(cursor)
   return kind == "fx" or kind == "branch"
 end
 
--- Only the user's items can be renamed, not the mirrored tracks and effects.
+-- Only the user's items can be renamed: branches and placed parameters,
+-- not the mirrored tracks and effects or the default branch.
 function M.can_rename(node)
-  return node ~= nil and (node.kind == "branch" or node.kind == "param")
+  return node ~= nil and (node.kind == "branch" or (node.kind == "param" and not node.data.unplaced))
 end
 
 -- At an effect's own level, a new branch goes after the existing branches

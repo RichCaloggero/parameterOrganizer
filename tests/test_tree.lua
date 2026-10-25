@@ -196,3 +196,29 @@ test("walk finds a node", function()
   local found = tree.walk(s.root, function(n) return n.data.index == 3 end)
   check_equal(found, s.p)
 end)
+
+test("Home and End stops: first item, first leaf, last item", function()
+  local fx = tree.new_node("fx", "EQ")
+  for _, name in ipairs({ "a", "b" }) do tree.add_child(fx, tree.new_node("branch", name)) end
+  for _, name in ipairs({ "x", "y", "z" }) do tree.add_child(fx, tree.new_node("param", name)) end
+  local c = { container = fx, index = 1 }
+  local down, up = {}, {}
+  while tree.move_stop(c, true) do down[#down + 1] = label_of(c) end
+  while tree.move_stop(c, false) do up[#up + 1] = label_of(c) end
+  check_equal(table.concat(down, " "), "x z", "down")
+  check_equal(table.concat(up, " "), "x a", "up")
+  c.index = 4   -- y, among the leaves
+  tree.move_stop(c, false)
+  check_equal(label_of(c), "x", "up from inside the leaves")
+end)
+
+test("Home and End without both kinds: first and last only", function()
+  local fx = tree.new_node("fx", "EQ")
+  for _, name in ipairs({ "x", "y", "z" }) do tree.add_child(fx, tree.new_node("param", name)) end
+  local c = { container = fx, index = 2 }
+  check_equal(tree.move_stop(c, true), true)
+  check_equal(label_of(c), "z")
+  check_equal(tree.move_stop(c, true), false, "already last")
+  tree.move_stop(c, false)
+  check_equal(label_of(c), "x")
+end)

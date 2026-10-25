@@ -7,49 +7,50 @@
 
 local K = {
   UP = 30064, DOWN = 1685026670, LEFT = 1818584692, RIGHT = 1919379572,
-  HOME = 6647396, END = 1752132965, TAB = 9, F2 = 26162, F5 = 26165,
-  F12 = 6697266, ESCAPE = 27, CTRL_N = 14, DELETE = 6579564,
-  C = 3, V = 22,   -- as Control+C and Control+V arrive
+  HOME = 6647396, END = 1752132965, PAGE_UP = 1885828464, PAGE_DOWN = 1885824110,
+  F2 = 26162, F5 = 26165, F12 = 6697266, ESCAPE = 27, DELETE = 6579564,
+  -- As Control+letter arrives:
+  CTRL_N = 14, F = 6, G = 7, R = 18, V = 22, X = 24,
 }
 local CTRL, SHIFT = 4, 8
 
+-- Home and End are swapped by default: End goes up, Home goes down.
 local keys = {
-  { K.RIGHT }, { K.RIGHT },                -- into Track 1, into Phaser
-  { K.DOWN }, { K.UP, SHIFT },             -- move, nudge a value
-  { K.TAB, CTRL },                         -- to the organized tree
-  { K.CTRL_N, CTRL },                      -- not available at track level
-  { K.RIGHT }, { K.CTRL_N, CTRL },         -- effect level: not available
-  { K.RIGHT },                             -- into the empty Phaser
-  { K.CTRL_N, CTRL }, { K.CTRL_N, CTRL },  -- frequency, then Q
+  { K.RIGHT }, { K.RIGHT },                -- into Track 1, into Phaser: Rate
+  { K.DOWN },                              -- Depth
+  { K.PAGE_UP }, { K.PAGE_UP, SHIFT },     -- small, then large step
+  { K.PAGE_DOWN, CTRL }, { K.PAGE_UP },    -- minimum, then a small step
+  { K.CTRL_N, CTRL }, { K.CTRL_N, CTRL },  -- frequency, then Q, ahead of the parameters
   { K.F2 },                                -- rename Q
-  { K.UP }, { K.RIGHT },                   -- into empty frequency
-  { K.F5 },                                -- refresh keeps the place
-  { K.LEFT }, { K.LEFT },
-  { K.TAB, CTRL },                         -- back to the source tree
-  { K.F12 }, { K.DOWN, SHIFT }, { K.ESCAPE },
-  -- Step 6: copy Depth, paste it into a branch, rename, delete.
-  { K.RIGHT }, { K.DOWN },                 -- source: Phaser, then Depth
-  { K.C, CTRL },                           -- copy Depth
-  { K.TAB, CTRL },                         -- organized: back in Phaser
-  { K.RIGHT }, { K.DOWN },                 -- frequency, then Q factor
-  { K.RIGHT },                             -- into empty Q factor
-  { K.V, CTRL },                           -- paste: Depth
+  { K.G, CTRL },                           -- sort: Depth before Rate
+  { K.F, CTRL },                           -- filter "dep": Depth only
+  { K.X, CTRL },                           -- cut Depth
+  { K.END }, { K.DOWN },                   -- up a stop to frequency, then Q factor
+  { K.RIGHT }, { K.V, CTRL },              -- paste into Q factor: filter clears
   { K.F2 }, { K.F2 },                      -- own name, then back to autolabel
-  { K.TAB, CTRL }, { K.TAB, CTRL },        -- source says where Depth is placed
   { K.LEFT },                              -- Q factor
-  { K.DELETE }, { K.DELETE },              -- ask, then delete
-  { K.TAB, CTRL },                         -- source: Depth unplaced again
-  { K.V, CTRL },                           -- not in the source tree
+  { K.DELETE }, { K.DELETE },              -- ask, then delete: Depth unplaced again, focus on Rate
+  { K.END }, { K.END },                    -- up a stop to the first parameter, then the first item
+  { K.HOME }, { K.HOME },                  -- down to the first parameter, then the last
+  { K.R, CTRL },                           -- original order: Rate first
+  { K.X, CTRL },                           -- cut Rate
+  { K.END, CTRL }, { K.RIGHT },            -- first item, frequency; into it
+  { K.V, CTRL },                           -- Rate placed in frequency
+  { K.LEFT }, { K.V, CTRL },               -- at the effect's level: unplaced again
+  { K.X, CTRL }, { K.END }, { K.RIGHT },   -- cut it once more, up to frequency, into it
+  { K.V, CTRL },                           -- placed, for session 2
+  { K.F12 }, { K.PAGE_DOWN }, { K.ESCAPE }, -- change a setting
+  { K.F5 },                                -- refresh keeps the place
   { K.ESCAPE },                            -- quit
 }
-local answers = { "frequency", "Q", "Q factor", "Mix depth", "" }
+local answers = { "frequency", "Q", "Q factor", "dep", "Mix depth", "" }
 
 -- Session 2: the second track's Phaser is a new instance of the same plugin.
 local keys_session2 = {
-  { K.TAB, CTRL },                         -- organized tree: Track 1
   { K.RIGHT }, { K.RIGHT },                -- Phaser, then its saved branch
-  { K.LEFT }, { K.LEFT }, { K.DOWN },      -- Track 2
-  { K.RIGHT }, { K.RIGHT },                -- its Phaser has the same branch
+  { K.RIGHT }, { K.LEFT }, { K.LEFT }, { K.LEFT },
+  { K.DOWN },                              -- Track 2
+  { K.RIGHT }, { K.RIGHT }, { K.RIGHT },   -- its Phaser has the same branch
   { K.ESCAPE },
 }
 

@@ -135,6 +135,37 @@ function M.move_last(cursor)
   return true
 end
 
+-- Home and End stop at the first item, the first leaf (only on a level
+-- that has non-leaf items before its leaves) and the last item.
+local function stops(cursor)
+  local children = cursor.container.children
+  local list = { 1 }
+  for i, child in ipairs(children) do
+    if M.is_leaf(child) then
+      if i > 1 then list[#list + 1] = i end
+      break
+    end
+  end
+  if #children > list[#list] then list[#list + 1] = #children end
+  return list
+end
+
+-- Moves to the next stop below the focus (down) or above it.
+function M.move_stop(cursor, down)
+  if #cursor.container.children == 0 then return false end
+  local list = stops(cursor)
+  local from, to, step = 1, #list, 1
+  if not down then from, to, step = #list, 1, -1 end
+  for i = from, to, step do
+    local stop = list[i]
+    if (down and stop > cursor.index) or (not down and stop < cursor.index) then
+      cursor.index = stop
+      return true
+    end
+  end
+  return false
+end
+
 -- Right: enter the focused non-leaf node, focusing its first child
 -- or its empty position.
 function M.enter(cursor)

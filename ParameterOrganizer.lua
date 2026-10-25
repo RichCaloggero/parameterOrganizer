@@ -5,9 +5,10 @@
 -- Runs in a tiny off-screen window that only captures keys; everything
 -- else is spoken through OSARA.
 --
--- This version (build step 7) browses the source tree, changes values, and
--- builds the organized tree (Control+Tab switches trees): branches, and
--- parameters copied in with Control+C and Control+V.
+-- One tree: tracks, their effects, and inside each effect the user's
+-- branches followed by the effect's unplaced parameters (the default
+-- branch), which Control+F filters, Control+G sorts and Control+R reverts.
+-- Control+X and Control+V move parameters into branches.
 -- F12 opens the settings list.
 
 local script_dir = debug.getinfo(1, "S").source:match("^@(.*[/\\])") or ""
@@ -27,19 +28,10 @@ local KEY = {
   UP = 30064, DOWN = 1685026670, LEFT = 1818584692, RIGHT = 1919379572,
   HOME = 6647396, END = 1752132965,
   PAGE_UP = 1885828464, PAGE_DOWN = 1885824110,
-  ENTER = 13, TAB = 9, F2 = 26162, F5 = 26165, F12 = 6697266, ESCAPE = 27,
+  ENTER = 13, F2 = 26162, F5 = 26165, F12 = 6697266, ESCAPE = 27,
   DELETE = 6579564,
-  CTRL_C = 3, CTRL_N = 14, CTRL_V = 22, CTRL_X = 24,
+  CTRL_C = 3, CTRL_F = 6, CTRL_G = 7, CTRL_N = 14, CTRL_R = 18, CTRL_V = 22, CTRL_X = 24,
 }
-
--- With Control held, gfx.getchar reports Tab and Control+I both as 9.
--- js_ReaScriptAPI, when installed, can tell them apart; without it,
--- Control+I also switches trees, which is harmless as it is unused.
-local VK_TAB = 0x09
-local function tab_is_down()
-  if not reaper.JS_VKeys_GetState then return true end
-  return (reaper.JS_VKeys_GetState(-2):byte(VK_TAB) or 0) ~= 0
-end
 
 -- Settings persist in REAPER's ExtState, so they survive script updates.
 local EXTSTATE_SECTION = "ParameterOrganizer"
@@ -51,12 +43,11 @@ local settings = settings_lib.new({
   set = function(key, text) reaper.SetExtState(EXTSTATE_SECTION, key, text, true) end,
 })
 
--- Two trees: the source tree (everything in the project) and the organized
--- tree (the user's branches). Each keeps its own cursor.
--- cursor is whichever list has the keyboard: the active tree, or the
--- settings list while it is open (tree_cursor then remembers the place).
+-- The source tree is read from the project and never shown: the organized
+-- tree, which mirrors it, is the one tree the user moves through.
+-- cursor is whichever list has the keyboard: the tree, or the settings
+-- list while it is open (tree_cursor then remembers the place).
 local source_root, organized_root
-local source_cursor, organized_cursor
 local cursor, tree_cursor
 
 -- After a dialog, speech is held until focus is back in the script's
@@ -88,32 +79,8 @@ local function deliver_held_speech(has_focus)
   held_speech = nil
 end
 
--- Where a source parameter is placed in the organized tree, for example
--- "placed in Q, attack", or "unplaced".
-local function placement_of(node)
-  local fx_node = organizer.find_fx(organized_root, node.data.fx_guid)
-  local placed = fx_node and organizer.find_placed(fx_node, node.data.index)
-  if not placed then return "unplaced" end
-  local path = organizer.branch_path(placed)
-  if #path == 0 then return "placed" end
-  return "placed in " .. table.concat(path, ", ")
-end
-
-local function in_source_tree(node)
-  return node.parent and tree.contains(source_root, node)
-end
-
 -- The value spoken after a leaf's label: a parameter's or a setting's.
--- Source parameters also say where they are placed.
 local function value_of(node)
-  if node.kind == "setting" then return settings.value_text(node.data.key) end
-  local value = reaper_fx.formatted_value(node)
-  if in_source_tree(node) then return value .. ", " .. placement_of(node) end
-  return value
-end
-
--- After a value change, only the new value is spoken.
-local function new_value_of(node)
   if node.kind == "setting" then return settings.value_text(node.data.key) end
   return reaper_fx.formatted_value(node)
 end
@@ -130,8 +97,11 @@ local function in_settings()
   return tree_cursor ~= nil
 end
 
-local function in_organized()
-  return cursor == organized_cursor
+-- The effect whose own level the cursor is on (where its branches and
+-- default branch are), or nil.
+local function effect_level()
+  if in_settings() or cursor.container.kind ~= "fx" then return nil end
+  return cursor.container
 end
 
 -- The names of one effect instance's parameters, by index, from the
@@ -178,62 +148,45 @@ end
 
 local function load_trees()
   source_root = reaper_fx.build_source_tree()
-  source_cursor = tree.new_cursor(source_root)
   organized_root = organizer.sync(nil, source_root)
   load_layouts()
-  organized_cursor = tree.new_cursor(organized_root)
-  cursor = source_cursor
+  cursor = tree.new_cursor(organized_root)
 end
 
--- After a rebuild, keep the source cursor on the same item if it still
--- exists; the old nodes are gone, so it is found again by identity.
-local function refocus_source(old_cursor)
-  local target = tree.focused(old_cursor) or old_cursor.container
-  local was_focused = target ~= old_cursor.container
-  local id = target.kind ~= "root" and reaper_fx.identity(target)
-
-  local found = id and tree.walk(source_root, function(n)
-    return n.kind ~= "root" and reaper_fx.identity(n) == id
-  end)
-  if found and was_focused then
-    tree.focus_node(source_cursor, found)
-  elseif found then
-    source_cursor.container = found
-    source_cursor.index = #found.children > 0 and 1 or 0
+-- An effect's default branch is rebuilt whenever a parameter leaves or
+-- joins it, which replaces its nodes. If the focus was on one of them, it
+-- follows that parameter when the view still shows it.
+local function refresh_default_branch(fx_node)
+  local focused = tree.focused(cursor)
+  local count = organizer.refresh_unplaced(fx_node)
+  if cursor.container ~= fx_node then return count end
+  if focused and focused.data.unplaced then
+    for i, child in ipairs(fx_node.children) do
+      if child.data.unplaced and child.data.index == focused.data.index then
+        cursor.index = i
+        return count
+      end
+    end
   end
+  local last = #fx_node.children
+  if cursor.index > last or (cursor.index == 0 and last > 0) then
+    cursor.index = math.min(math.max(cursor.index, 1), last)
+  end
+  return count
 end
 
--- F5: rebuild from the project. The organized tree keeps its nodes (and
--- the user's branches) for tracks and effects that still exist, so its
--- cursor stays put unless its item was removed.
+-- F5: rebuild from the project. The tree keeps its nodes (and the user's
+-- branches) for tracks and effects that still exist, so the cursor stays
+-- put unless its item was removed.
 local function refresh()
-  local was_organized = in_organized()
-  local old_source_cursor = source_cursor
-
   source_root = reaper_fx.build_source_tree()
-  source_cursor = tree.new_cursor(source_root)
-  refocus_source(old_source_cursor)
-
   organizer.sync(organized_root, source_root)
   load_layouts()
-  local c = organized_cursor
+  local c = cursor
   if not tree.contains(organized_root, c.container) or c.index > #c.container.children then
-    organized_cursor = tree.new_cursor(organized_root)
+    cursor = tree.new_cursor(organized_root)
   end
-
-  cursor = was_organized and organized_cursor or source_cursor
   speak("Refreshed. " .. describe_focused(true))
-end
-
--- Control+Tab: switch between the two trees.
-local function switch_tree()
-  if in_organized() then
-    cursor = source_cursor
-    speak("Source tree. " .. describe_focused(true))
-  else
-    cursor = organized_cursor
-    speak("Organized tree. " .. describe_focused(true))
-  end
 end
 
 -- The screen reader announces the window's name when it gains focus, so
@@ -283,7 +236,7 @@ end
 
 -- Control+N: a new branch at the current level, after the focused item.
 local function create_branch()
-  if not in_organized() or not organizer.can_create_branch(cursor) then
+  if in_settings() or not organizer.can_create_branch(cursor) then
     speak("Not available here")
     return
   end
@@ -301,7 +254,7 @@ end
 -- parameter back its autolabel; a branch keeps its name.
 local function rename()
   local node = tree.focused(cursor)
-  if not in_organized() or not organizer.can_rename(node) then
+  if in_settings() or not organizer.can_rename(node) then
     speak("Not available here")
     return
   end
@@ -339,8 +292,11 @@ local function copy(verb)
   speak(verb .. " " .. node.label)
 end
 
+-- Control+V. In a branch, places the parameter there. At the effect's own
+-- level, returns it to unplaced (the default branch). When a paste
+-- empties a filtered default branch, the filter has done its job: clear it.
 local function paste()
-  if not in_organized() then
+  if in_settings() then
     speak("Not available here")
     return
   end
@@ -348,26 +304,43 @@ local function paste()
     speak("Nothing to paste")
     return
   end
+  local unplacing = effect_level() ~= nil
   local node, result = organizer.paste(cursor, clipboard)
-  if not node then
+  if type(result) == "string" then
     speak(result)
     return
   end
   save_layout()
+
+  -- When unplacing, node is nil if the default branch's view hides it.
   local msg = describe_focused(true)
-  if result then
+  if unplacing then
+    msg = "Unplaced. " .. msg
+  elseif result then
     msg = msg .. (#result > 0 and ", moved from " .. table.concat(result, ", ") or ", moved")
+  end
+
+  local fx_node = tree.enclosing(cursor.container, "fx")
+  local remaining = 0
+  for _, child in ipairs(fx_node.children) do
+    if child.data.unplaced then remaining = remaining + 1 end
+  end
+  if fx_node.view.filter and remaining == 0 then
+    fx_node.view.filter = nil
+    refresh_default_branch(fx_node)
+    msg = msg .. ". Filter cleared"
   end
   speak(msg)
 end
 
 -- Delete: a parameter goes back to unplaced straight away. A branch that
--- holds anything asks first: press Delete again to confirm.
+-- holds anything asks first: press Delete again to confirm. Either way the
+-- parameters rejoin the effect's default branch.
 local pending_delete
 
 local function delete()
   local node = tree.focused(cursor)
-  if not in_organized() or not organizer.can_delete(node) then
+  if in_settings() or not organizer.can_delete(node) then
     speak("Not available here")
     return
   end
@@ -379,9 +352,65 @@ local function delete()
     return
   end
   pending_delete = nil
+  local fx_node = tree.enclosing(cursor.container, "fx")
   tree.remove_focused(cursor)
+  refresh_default_branch(fx_node)
   save_layout()
   speak("Deleted " .. node.label .. ". " .. describe_focused(true))
+end
+
+---------------------------------------------------------------------------
+-- The default branch's view: Control+F filters, Control+G sorts and
+-- Control+R reverts. Each acts on the effect whose own level the cursor
+-- is on, and never moves its branches.
+
+local function view_target()
+  local fx_node = effect_level()
+  if not fx_node then speak("Not available here") end
+  return fx_node
+end
+
+local function filter()
+  local fx_node = view_target()
+  if not fx_node then return end
+  local text = prompt_text("Filter", "Show parameters containing:", fx_node.view.filter)
+  if not text then
+    speak("Cancelled")
+    return
+  end
+  local old = fx_node.view.filter
+  fx_node.view.filter = text ~= "" and text or nil
+  local count = refresh_default_branch(fx_node)
+  if fx_node.view.filter and count == 0 then
+    fx_node.view.filter = old
+    refresh_default_branch(fx_node)
+    speak("Nothing matches " .. text)
+    return
+  end
+  if not fx_node.view.filter then
+    speak("Filter cleared. " .. describe_focused(true))
+    return
+  end
+  -- Land on the first match, past the branches.
+  tree.move_first(cursor)
+  if not tree.is_leaf(tree.focused(cursor)) then tree.move_stop(cursor, true) end
+  speak(count .. (count == 1 and " match. " or " matches. ") .. describe_focused(true))
+end
+
+local function sort()
+  local fx_node = view_target()
+  if not fx_node then return end
+  fx_node.view.sorted = true
+  refresh_default_branch(fx_node)
+  speak("Sorted. " .. describe_focused(true))
+end
+
+local function revert()
+  local fx_node = view_target()
+  if not fx_node then return end
+  fx_node.view.sorted, fx_node.view.filter = false, nil
+  refresh_default_branch(fx_node)
+  speak("Original order. " .. describe_focused(true))
 end
 
 -- F12 opens the settings list; F12 or Escape returns to the same place.
@@ -421,10 +450,10 @@ local function step_value(direction, large)
   else
     reaper_fx.step_value(node, direction, large)
   end
-  speak(new_value_of(node))
+  speak(value_of(node))
 end
 
--- Shift+Home and Shift+End: the minimum or maximum of the range.
+-- Control+Page Up and Control+Page Down: the maximum or minimum.
 local function value_to_extreme(to_max)
   local node = value_target()
   if not node then return end
@@ -433,7 +462,19 @@ local function value_to_extreme(to_max)
   else
     reaper_fx.set_extreme(node, to_max)
   end
-  speak(new_value_of(node))
+  speak(value_of(node))
+end
+
+-- Right: entering an effect whose default branch is filtered says so, so
+-- the hidden parameters aren't taken for missing.
+local function enter()
+  if not tree.enter(cursor) then return end
+  local fx_node = effect_level()
+  if fx_node and fx_node.view.filter then
+    speak("Filtered. " .. describe_focused(false))
+  else
+    speak_focused(false)
+  end
 end
 
 local function type_value()
@@ -458,8 +499,8 @@ local function handle_key(code, cap)
 
   -- Home and End follow the "Home and End" setting. When swapped (for
   -- keyboards where Home sits below End), the lower key goes down, like
-  -- Down and Shift+Down: Home moves to the last item and Shift+Home sets
-  -- the minimum. Otherwise both are reversed.
+  -- Down: Home moves towards the last item. Otherwise both are reversed.
+  -- Page Up and Page Down are never swapped.
   local to_end
   if code == KEY.HOME or code == KEY.END then
     to_end = (code == KEY.END) ~= settings.get("swap_home_end")
@@ -474,32 +515,29 @@ local function handle_key(code, cap)
     return false
   elseif code == KEY.F12 and plain then
     open_settings()
-  elseif shift_only and code == KEY.UP then
-    step_value(1, false)
-  elseif shift_only and code == KEY.DOWN then
-    step_value(-1, false)
-  elseif shift_only and to_end ~= nil then
-    -- The end of a list is at the bottom, but the top of a range is its
-    -- maximum, so the key that goes to the end of a list sets the minimum.
-    value_to_extreme(not to_end)
-  elseif ctrl_only and code == KEY.TAB and not in_settings() then
-    if tab_is_down() then switch_tree() end
+  elseif (code == KEY.PAGE_UP or code == KEY.PAGE_DOWN) and (plain or shift_only) then
+    step_value(code == KEY.PAGE_UP and 1 or -1, shift_only)
+  elseif (code == KEY.PAGE_UP or code == KEY.PAGE_DOWN) and ctrl_only then
+    value_to_extreme(code == KEY.PAGE_UP)
+  elseif to_end ~= nil and ctrl_only then
+    local move = to_end and tree.move_last or tree.move_first
+    if move(cursor) then speak_focused(true) end
   elseif ctrl_only and code == KEY.CTRL_N then
     create_branch()
-  elseif ctrl_only and code == KEY.CTRL_C then
-    copy("Copied")
-  elseif ctrl_only and code == KEY.CTRL_X then
-    if in_organized() then copy("Cut") else speak("Not available here") end
+  elseif ctrl_only and (code == KEY.CTRL_X or code == KEY.CTRL_C) then
+    copy("Cut")
   elseif ctrl_only and code == KEY.CTRL_V then
     paste()
+  elseif ctrl_only and code == KEY.CTRL_F then
+    filter()
+  elseif ctrl_only and code == KEY.CTRL_G then
+    sort()
+  elseif ctrl_only and code == KEY.CTRL_R then
+    revert()
   elseif code == KEY.DELETE and plain then
     delete()
   elseif not plain then
-    -- Other modified keys arrive in later build steps.
-  elseif code == KEY.PAGE_UP then
-    step_value(1, true)
-  elseif code == KEY.PAGE_DOWN then
-    step_value(-1, true)
+    -- Other modified keys (selection) arrive in a later step.
   elseif code == KEY.ENTER then
     type_value()
   elseif code == KEY.UP then
@@ -507,10 +545,9 @@ local function handle_key(code, cap)
   elseif code == KEY.DOWN then
     if tree.move_next(cursor) then speak_focused(true) end
   elseif to_end ~= nil then
-    local move = to_end and tree.move_last or tree.move_first
-    if move(cursor) then speak_focused(true) end
+    if tree.move_stop(cursor, to_end) then speak_focused(true) end
   elseif code == KEY.RIGHT then
-    if tree.enter(cursor) then speak_focused(false) end
+    enter()
   elseif code == KEY.LEFT then
     if tree.leave(cursor) then speak_focused(false) end
   elseif code == KEY.F5 and not in_settings() then
@@ -562,7 +599,7 @@ end
 
 load_trees()
 if tree.focused(cursor) then
-  window_title = "Parameter organizer, source tree"
+  window_title = "Parameter organizer"
 else
   window_title = "Parameter organizer, no effects in this project. F5 refreshes, Escape quits"
 end

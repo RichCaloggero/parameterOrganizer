@@ -75,6 +75,7 @@ test("only branches and parameters can be renamed", function()
   check_equal(organizer.can_rename(tree.new_node("fx", "x")), false)
   check_equal(organizer.can_rename(tree.new_node("track", "x")), false)
   check_equal(organizer.can_rename(nil), false, "empty position")
+  check_equal(organizer.can_rename(tree.new_node("param", "x", { unplaced = true })), false, "unplaced")
 end)
 
 test("sync keeps branches, follows renames and order, adds and removes", function()

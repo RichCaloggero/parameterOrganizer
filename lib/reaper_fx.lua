@@ -47,6 +47,17 @@ local function container_items(track, fx)
   return items
 end
 
+-- What identifies the plugin type, the same for every instance of it, so
+-- that one saved layout serves them all: REAPER's plugin identifier when
+-- available (it ignores renamed instances), otherwise the plugin's name.
+local function plugin_key(track, fx, fx_name)
+  if reaper.TrackFX_GetNamedConfigParm then
+    local ok, ident = reaper.TrackFX_GetNamedConfigParm(track, fx, "fx_ident")
+    if ok and ident ~= "" then return ident end
+  end
+  return fx_name
+end
+
 -- Adds an effect under parent: for a container, first the effects it
 -- holds (each added the same way), then its own parameters.
 local function add_fx(parent, track, fx)
@@ -58,6 +69,7 @@ local function add_fx(parent, track, fx)
     fx = fx,
     guid = fx_guid,
     is_container = items ~= nil,
+    plugin_key = plugin_key(track, fx, fx_name),
   }))
 
   for _, item in ipairs(items or {}) do
@@ -106,6 +118,7 @@ end
 -- The value of a parameter as the plugin displays it, such as "350 Hz".
 function M.formatted_value(node)
   local d = node.data
+  if d.missing then return "missing" end
   local ok, value = reaper.TrackFX_GetFormattedParamValue(d.track, d.fx, d.index, "")
   if ok and value ~= "" then return value end
   local normalized = reaper.TrackFX_GetParamNormalized(d.track, d.fx, d.index)

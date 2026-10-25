@@ -1,11 +1,11 @@
 -- @description Parameter Organizer
--- @version 0.5
+-- @version 0.6
 --
 -- Browse every track's effect parameters as a tree, by keyboard and speech.
 -- Runs in a tiny off-screen window that only captures keys; everything
 -- else is spoken through OSARA.
 --
--- This version (build step 6) browses the source tree, changes values, and
+-- This version (build step 7) browses the source tree, changes values, and
 -- builds the organized tree (Control+Tab switches trees): branches, and
 -- parameters copied in with Control+C and Control+V.
 -- F12 opens the settings list.
@@ -18,6 +18,8 @@ local announce = require("announce")
 local reaper_fx = require("reaper_fx")
 local settings_lib = require("settings")
 local organizer = require("organizer")
+local layout = require("layout")
+local storage = require("storage")
 
 local MOD_CTRL, MOD_SHIFT, MOD_ALT = 4, 8, 16
 
@@ -132,10 +134,53 @@ local function in_organized()
   return cursor == organized_cursor
 end
 
+-- The names of one effect instance's parameters, by index, from the
+-- source tree: what a saved layout is matched against.
+local function source_names(fx_guid)
+  local names = {}
+  tree.walk(source_root, function(n)
+    if n.kind == "param" and n.data.fx_guid == fx_guid then names[n.data.index] = n.data.original_name end
+  end)
+  return names
+end
+
+-- Gives every organized effect that doesn't have its layout yet the one
+-- saved for it (new effects appear at startup and after F5).
+local function load_layouts()
+  tree.walk(organized_root, function(n)
+    if n.kind == "fx" and not n.layout_loaded then
+      n.layout_loaded = true
+      local text = storage.load(n.data)
+      if text then layout.apply(n, text, source_names(n.data.guid)) end
+    end
+  end)
+end
+
+-- Saves the layout of the effect being organized, after every change.
+-- Other instances of the same plugin share the layout, so they are
+-- updated at once (the cursor is never inside them while this one changes).
+local function save_layout()
+  local fx_node = tree.enclosing(cursor.container, "fx")
+  if not fx_node then return end
+  local text = layout.serialize(fx_node)
+  if not storage.save(fx_node.data, text) then
+    speak("Could not save the layout")
+    return
+  end
+  if fx_node.data.is_container then return end
+  tree.walk(organized_root, function(n)
+    if n.kind == "fx" and n ~= fx_node and not n.data.is_container
+       and n.data.plugin_key == fx_node.data.plugin_key then
+      layout.apply(n, text, source_names(n.data.guid))
+    end
+  end)
+end
+
 local function load_trees()
   source_root = reaper_fx.build_source_tree()
   source_cursor = tree.new_cursor(source_root)
   organized_root = organizer.sync(nil, source_root)
+  load_layouts()
   organized_cursor = tree.new_cursor(organized_root)
   cursor = source_cursor
 end
@@ -170,6 +215,7 @@ local function refresh()
   refocus_source(old_source_cursor)
 
   organizer.sync(organized_root, source_root)
+  load_layouts()
   local c = organized_cursor
   if not tree.contains(organized_root, c.container) or c.index > #c.container.children then
     organized_cursor = tree.new_cursor(organized_root)
@@ -247,6 +293,7 @@ local function create_branch()
     return
   end
   organizer.create_branch(cursor, name)
+  save_layout()
   speak(describe_focused(true))
 end
 
@@ -268,6 +315,7 @@ local function rename()
   else
     organizer.rename_param(node, name)
   end
+  save_layout()
   speak(describe_focused(true))
 end
 
@@ -280,6 +328,10 @@ local function copy(verb)
   local node = tree.focused(cursor)
   if not node or node.kind ~= "param" then
     speak("Not available here")
+    return
+  end
+  if node.data.missing then
+    speak("Missing parameters can't be copied")
     return
   end
   local d = node.data
@@ -301,6 +353,7 @@ local function paste()
     speak(result)
     return
   end
+  save_layout()
   local msg = describe_focused(true)
   if result then
     msg = msg .. (#result > 0 and ", moved from " .. table.concat(result, ", ") or ", moved")
@@ -327,6 +380,7 @@ local function delete()
   end
   pending_delete = nil
   tree.remove_focused(cursor)
+  save_layout()
   speak("Deleted " .. node.label .. ". " .. describe_focused(true))
 end
 
@@ -348,10 +402,20 @@ local function close_settings()
 end
 
 -- Value keys act only on a focused parameter or setting, and speak the
--- new value.
-local function step_value(direction, large)
+-- new value. A missing parameter (from a saved layout) has no value.
+local function value_target()
   local node = tree.focused(cursor)
-  if not node or not tree.is_leaf(node) then return end
+  if not node or not tree.is_leaf(node) then return nil end
+  if node.data.missing then
+    speak("missing")
+    return nil
+  end
+  return node
+end
+
+local function step_value(direction, large)
+  local node = value_target()
+  if not node then return end
   if node.kind == "setting" then
     settings.step(node.data.key, direction)
   else
@@ -362,8 +426,8 @@ end
 
 -- Shift+Home and Shift+End: the minimum or maximum of the range.
 local function value_to_extreme(to_max)
-  local node = tree.focused(cursor)
-  if not node or not tree.is_leaf(node) then return end
+  local node = value_target()
+  if not node then return end
   if node.kind == "setting" then
     settings.step(node.data.key, to_max and 1 or -1)
   else
@@ -373,7 +437,7 @@ local function value_to_extreme(to_max)
 end
 
 local function type_value()
-  local node = tree.focused(cursor)
+  local node = value_target()
   if not node or node.kind ~= "param" then return end
   local text = prompt_text("Set " .. node.label, node.label .. " value:",
     reaper_fx.formatted_value(node))

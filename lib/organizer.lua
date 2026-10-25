@@ -127,7 +127,7 @@ end
 -- The placed copy of fx_node's parameter index, if any.
 function M.find_placed(fx_node, index)
   return tree.walk(fx_node, function(n)
-    return belongs_to(n, fx_node) and n.data.index == index
+    return belongs_to(n, fx_node) and n.data.index == index and not n.data.missing
   end)
 end
 

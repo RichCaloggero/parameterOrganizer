@@ -32,6 +32,7 @@ require("test_value_search")
 require("test_values")
 require("test_settings")
 require("test_organizer")
+require("test_layout")
 
 print(passed .. " passed, " .. failed .. " failed")
 os.exit(failed == 0 and 0 or 1)

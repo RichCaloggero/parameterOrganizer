@@ -57,10 +57,13 @@ Decision: use `reaper.GetUserInputs`, REAPER's own dialog. It needs little code 
 
 - One layout per plugin type, shared by every instance in every project.
 - Plugins are keyed by REAPER's plugin identifier (`fx_ident` named config parameter), not by the instance name.
-- Files live in a `ParameterOrganizer` folder inside the REAPER resource path, one file per plugin type.
+- Files live in `ParameterOrganizer/layouts` inside the REAPER resource path, one plain-text file per plugin type (`lib/layout.lua` describes the format).
+- Exception: a container's own parameters depend on that container, so its layout is saved in the project (project ExtState), keyed by the container's GUID, and kept when the project is saved.
+- Layouts load at startup and when F5 finds new effects.
 - Parameters are stored by index plus original name. On load, if the name at that index doesn't match, the script searches by name. If it still can't find the parameter, it marks it "missing" and announces that.
 - Saving happens after every change.
-- Consequence: the same plugin on two tracks shows the same branches. Editing the layout under one changes both. Values stay per instance.
+- Consequence: the same plugin on two tracks shows the same branches. Editing the layout under one changes both, at once. Values stay per instance.
+- Missing parameters stay in the layout (so a temporarily different plugin doesn't lose it), speak "missing" instead of a value, and can be deleted but not copied or changed.
 
 ## Keyboard
 

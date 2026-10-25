@@ -1,5 +1,8 @@
 -- Smoke test: runs ParameterOrganizer.lua against a fake REAPER, presses a
 -- scripted sequence of keys, and prints everything that would be spoken.
+-- Then runs it a second time, as a new session with a second instance of
+-- the same plugin, to check that the saved layout comes back for both.
+-- Layouts are saved under %TEMP%\po_smoke, cleared first.
 -- Usage, from the project folder:  lua55.exe tests\smoke_main.lua
 
 local K = {
@@ -41,6 +44,18 @@ local keys = {
 }
 local answers = { "frequency", "Q", "Q factor", "Mix depth", "" }
 
+-- Session 2: the second track's Phaser is a new instance of the same plugin.
+local keys_session2 = {
+  { K.TAB, CTRL },                         -- organized tree: Track 1
+  { K.RIGHT }, { K.RIGHT },                -- Phaser, then its saved branch
+  { K.LEFT }, { K.LEFT }, { K.DOWN },      -- Track 2
+  { K.RIGHT }, { K.RIGHT },                -- its Phaser has the same branch
+  { K.ESCAPE },
+}
+
+local resource = (os.getenv("TEMP") or ".") .. "/po_smoke"
+os.execute('rmdir /s /q "' .. resource:gsub("/", "\\") .. '" 2>nul')
+
 local tracks = {
   { name = "Vocals", number = 1, guid = "{T1}", fx = {
     { name = "JS: Phaser", guid = "{F1}", params = { "Rate", "Depth" }, values = { 0.2, 0.5 } },
@@ -48,7 +63,7 @@ local tracks = {
 }
 local master = { name = "", number = -1, guid = "{M}", fx = {} }
 
-local clock, key_index, answer_index, next_key_at = 0, 0, 0, 1
+local clock, key_index, answer_index, next_key_at
 local spoken, deferred, extstate = {}, {}, {}
 
 local function param(t, fx, p) return t.fx[fx + 1], p + 1 end
@@ -77,6 +92,16 @@ reaper = {
   TrackFX_GetFXGUID = function(t, fx) return t.fx[fx + 1].guid end,
   TrackFX_GetNumParams = function(t, fx) return #t.fx[fx + 1].params end,
   TrackFX_GetParamName = function(t, fx, p) local f, i = param(t, fx, p) return true, f.params[i] end,
+  TrackFX_GetNamedConfigParm = function(t, fx, name)
+    if name == "fx_ident" then return true, "JS: Phaser plugin file" end
+    return false, ""
+  end,
+  GetResourcePath = function() return resource end,
+  RecursiveCreateDirectory = function(path)
+    os.execute('mkdir "' .. path:gsub("/", "\\") .. '" 2>nul')
+  end,
+  GetProjExtState = function() return 0, "" end,
+  SetProjExtState = function() end,
   TrackFX_GetParameterStepSizes = function() return false, 0, 0, 0, false end,
   TrackFX_GetParamNormalized = function(t, fx, p) local f, i = param(t, fx, p) return f.values[i] end,
   TrackFX_SetParamNormalized = function(t, fx, p, x) local f, i = param(t, fx, p) f.values[i] = x end,
@@ -106,9 +131,28 @@ gfx = {
   end,
 }
 
-dofile("ParameterOrganizer.lua")
-while #deferred > 0 do
-  table.remove(deferred, 1)()
+local function session(session_keys)
+  keys, clock, key_index, answer_index, next_key_at = session_keys, 0, 0, 0, 1
+  spoken = {}
+  package.loaded.storage, package.loaded.layout = nil, nil
+  dofile("ParameterOrganizer.lua")
+  while #deferred > 0 do
+    table.remove(deferred, 1)()
+  end
+  for i, msg in ipairs(spoken) do print(i, msg) end
 end
 
-for i, msg in ipairs(spoken) do print(i, msg) end
+print("Session 1")
+session(keys)
+
+print("Saved layout:")
+local f = io.open(resource .. "/ParameterOrganizer/layouts/" ..
+  require("storage").file_name("JS: Phaser plugin file"))
+io.write(f and f:read("a") or "(none)\n")
+if f then f:close() end
+
+print("Session 2")
+tracks[2] = { name = "Bass", number = 2, guid = "{T2}", fx = {
+  { name = "JS: Phaser", guid = "{F2}", params = { "Rate", "Depth" }, values = { 0.7, 0.1 } },
+} }
+session(keys_session2)

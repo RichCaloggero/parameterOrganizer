@@ -32,6 +32,52 @@ local function track_label(track, is_master)
   return "Track " .. number .. " " .. name
 end
 
+-- The addresses of the effects inside a container (REAPER 7), or nil when
+-- fx is not a container. The addresses work with every TrackFX_ function,
+-- including for containers nested inside containers.
+local function container_items(track, fx)
+  if not reaper.TrackFX_GetNamedConfigParm then return nil end
+  local ok, count = reaper.TrackFX_GetNamedConfigParm(track, fx, "container_count")
+  if not ok then return nil end
+  local items = {}
+  for i = 0, (tonumber(count) or 0) - 1 do
+    local found, address = reaper.TrackFX_GetNamedConfigParm(track, fx, "container_item." .. i)
+    if found and tonumber(address) then items[#items + 1] = tonumber(address) end
+  end
+  return items
+end
+
+-- Adds an effect under parent: for a container, first the effects it
+-- holds (each added the same way), then its own parameters.
+local function add_fx(parent, track, fx)
+  local _, fx_name = reaper.TrackFX_GetFXName(track, fx, "")
+  local fx_guid = reaper.TrackFX_GetFXGUID(track, fx)
+  local items = container_items(track, fx)
+  local fx_node = tree.add_child(parent, tree.new_node("fx", clean_fx_name(fx_name), {
+    track = track,
+    fx = fx,
+    guid = fx_guid,
+    is_container = items ~= nil,
+  }))
+
+  for _, item in ipairs(items or {}) do
+    add_fx(fx_node, track, item)
+  end
+
+  local param_count = reaper.TrackFX_GetNumParams(track, fx)
+  for param = 0, param_count - 1 do
+    local _, param_name = reaper.TrackFX_GetParamName(track, fx, param, "")
+    tree.add_child(fx_node, tree.new_node("param", param_name, {
+      track = track,
+      fx = fx,
+      fx_guid = fx_guid,
+      index = param,
+      original_name = param_name,
+      builtin_switch = param >= param_count - 3 and BUILTIN_SWITCHES[param_name],
+    }))
+  end
+end
+
 local function add_track(root, track, is_master)
   local fx_count = reaper.TrackFX_GetCount(track)
   if fx_count == 0 then return end
@@ -42,26 +88,7 @@ local function add_track(root, track, is_master)
   }))
 
   for fx = 0, fx_count - 1 do
-    local _, fx_name = reaper.TrackFX_GetFXName(track, fx, "")
-    local fx_guid = reaper.TrackFX_GetFXGUID(track, fx)
-    local fx_node = tree.add_child(track_node, tree.new_node("fx", clean_fx_name(fx_name), {
-      track = track,
-      fx = fx,
-      guid = fx_guid,
-    }))
-
-    local param_count = reaper.TrackFX_GetNumParams(track, fx)
-    for param = 0, param_count - 1 do
-      local _, param_name = reaper.TrackFX_GetParamName(track, fx, param, "")
-      tree.add_child(fx_node, tree.new_node("param", param_name, {
-        track = track,
-        fx = fx,
-        fx_guid = fx_guid,
-        index = param,
-        original_name = param_name,
-        builtin_switch = param >= param_count - 3 and BUILTIN_SWITCHES[param_name],
-      }))
-    end
+    add_fx(track_node, track, fx)
   end
 end
 

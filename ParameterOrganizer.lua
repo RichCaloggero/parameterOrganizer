@@ -1,12 +1,13 @@
 -- @description Parameter Organizer
--- @version 0.4
+-- @version 0.5
 --
 -- Browse every track's effect parameters as a tree, by keyboard and speech.
 -- Runs in a tiny off-screen window that only captures keys; everything
 -- else is spoken through OSARA.
 --
--- This version (build step 5) browses the source tree, changes values, and
--- builds branches in the organized tree (Control+Tab switches trees).
+-- This version (build step 6) browses the source tree, changes values, and
+-- builds the organized tree (Control+Tab switches trees): branches, and
+-- parameters copied in with Control+C and Control+V.
 -- F12 opens the settings list.
 
 local script_dir = debug.getinfo(1, "S").source:match("^@(.*[/\\])") or ""
@@ -25,7 +26,8 @@ local KEY = {
   HOME = 6647396, END = 1752132965,
   PAGE_UP = 1885828464, PAGE_DOWN = 1885824110,
   ENTER = 13, TAB = 9, F2 = 26162, F5 = 26165, F12 = 6697266, ESCAPE = 27,
-  CTRL_N = 14,
+  DELETE = 6579564,
+  CTRL_C = 3, CTRL_N = 14, CTRL_V = 22, CTRL_X = 24,
 }
 
 -- With Control held, gfx.getchar reports Tab and Control+I both as 9.
@@ -84,8 +86,32 @@ local function deliver_held_speech(has_focus)
   held_speech = nil
 end
 
+-- Where a source parameter is placed in the organized tree, for example
+-- "placed in Q, attack", or "unplaced".
+local function placement_of(node)
+  local fx_node = organizer.find_fx(organized_root, node.data.fx_guid)
+  local placed = fx_node and organizer.find_placed(fx_node, node.data.index)
+  if not placed then return "unplaced" end
+  local path = organizer.branch_path(placed)
+  if #path == 0 then return "placed" end
+  return "placed in " .. table.concat(path, ", ")
+end
+
+local function in_source_tree(node)
+  return node.parent and tree.contains(source_root, node)
+end
+
 -- The value spoken after a leaf's label: a parameter's or a setting's.
+-- Source parameters also say where they are placed.
 local function value_of(node)
+  if node.kind == "setting" then return settings.value_text(node.data.key) end
+  local value = reaper_fx.formatted_value(node)
+  if in_source_tree(node) then return value .. ", " .. placement_of(node) end
+  return value
+end
+
+-- After a value change, only the new value is spoken.
+local function new_value_of(node)
   if node.kind == "setting" then return settings.value_text(node.data.key) end
   return reaper_fx.formatted_value(node)
 end
@@ -197,7 +223,8 @@ local function refocus_window()
   open_window()
 end
 
--- Asks for a name in REAPER's dialog. Returns nil when cancelled or empty.
+-- Asks for text in REAPER's dialog. Returns the text with surrounding
+-- spaces removed (possibly ""), or nil when cancelled.
 local function prompt_text(title, caption, default)
   -- GetUserInputs separates fields with commas, so none may appear inside one.
   local ok, text = reaper.GetUserInputs(title, 1,
@@ -205,9 +232,7 @@ local function prompt_text(title, caption, default)
   refocus_check_at = reaper.time_precise() + REFOCUS_DELAY
   awaiting_focus = true
   if not ok then return nil end
-  text = text:match("^%s*(.-)%s*$")
-  if text == "" then return nil end
-  return text
+  return text:match("^%s*(.-)%s*$")
 end
 
 -- Control+N: a new branch at the current level, after the focused item.
@@ -217,7 +242,7 @@ local function create_branch()
     return
   end
   local name = prompt_text("New branch", "Branch name:")
-  if not name then
+  if not name or name == "" then
     speak("Cancelled")
     return
   end
@@ -225,7 +250,8 @@ local function create_branch()
   speak(describe_focused(true))
 end
 
--- F2: rename the focused branch.
+-- F2: rename the focused branch or parameter. An empty name gives a
+-- parameter back its autolabel; a branch keeps its name.
 local function rename()
   local node = tree.focused(cursor)
   if not in_organized() or not organizer.can_rename(node) then
@@ -233,12 +259,75 @@ local function rename()
     return
   end
   local name = prompt_text("Rename", "New name:", node.label)
-  if not name then
+  if not name or (name == "" and node.kind == "branch") then
     speak("Cancelled")
     return
   end
-  node.label = name
+  if node.kind == "branch" then
+    organizer.rename_branch(node, name)
+  else
+    organizer.rename_param(node, name)
+  end
   speak(describe_focused(true))
+end
+
+-- Control+C and Control+X: remember a parameter for Control+V. A parameter
+-- appears only once in the organized tree, so pasting either one moves an
+-- already placed parameter; cut leaves it in place until then.
+local clipboard
+
+local function copy(verb)
+  local node = tree.focused(cursor)
+  if not node or node.kind ~= "param" then
+    speak("Not available here")
+    return
+  end
+  local d = node.data
+  clipboard = { fx_guid = d.fx_guid, index = d.index, original_name = d.original_name }
+  speak(verb .. " " .. node.label)
+end
+
+local function paste()
+  if not in_organized() then
+    speak("Not available here")
+    return
+  end
+  if not clipboard then
+    speak("Nothing to paste")
+    return
+  end
+  local node, result = organizer.paste(cursor, clipboard)
+  if not node then
+    speak(result)
+    return
+  end
+  local msg = describe_focused(true)
+  if result then
+    msg = msg .. (#result > 0 and ", moved from " .. table.concat(result, ", ") or ", moved")
+  end
+  speak(msg)
+end
+
+-- Delete: a parameter goes back to unplaced straight away. A branch that
+-- holds anything asks first: press Delete again to confirm.
+local pending_delete
+
+local function delete()
+  local node = tree.focused(cursor)
+  if not in_organized() or not organizer.can_delete(node) then
+    speak("Not available here")
+    return
+  end
+  if node.kind == "branch" and #node.children > 0 and pending_delete ~= node then
+    pending_delete = node
+    local count = organizer.count_params(node)
+    speak("Delete " .. node.label .. " and its " .. count ..
+      (count == 1 and " parameter" or " parameters") .. "? Press Delete again to confirm")
+    return
+  end
+  pending_delete = nil
+  tree.remove_focused(cursor)
+  speak("Deleted " .. node.label .. ". " .. describe_focused(true))
 end
 
 -- F12 opens the settings list; F12 or Escape returns to the same place.
@@ -268,7 +357,7 @@ local function step_value(direction, large)
   else
     reaper_fx.step_value(node, direction, large)
   end
-  speak(value_of(node))
+  speak(new_value_of(node))
 end
 
 -- Shift+Home and Shift+End: the minimum or maximum of the range.
@@ -280,7 +369,7 @@ local function value_to_extreme(to_max)
   else
     reaper_fx.set_extreme(node, to_max)
   end
-  speak(value_of(node))
+  speak(new_value_of(node))
 end
 
 local function type_value()
@@ -288,7 +377,7 @@ local function type_value()
   if not node or node.kind ~= "param" then return end
   local text = prompt_text("Set " .. node.label, node.label .. " value:",
     reaper_fx.formatted_value(node))
-  if not text then
+  if not text or text == "" then
     speak("Cancelled")
   elseif reaper_fx.set_value_from_text(node, text) then
     speak(reaper_fx.formatted_value(node))
@@ -312,6 +401,9 @@ local function handle_key(code, cap)
     to_end = (code == KEY.END) ~= settings.get("swap_home_end")
   end
 
+  -- A branch delete is confirmed only by pressing Delete again straight away.
+  if code ~= KEY.DELETE then pending_delete = nil end
+
   if (code == KEY.ESCAPE or code == KEY.F12) and plain and in_settings() then
     close_settings()
   elseif code == KEY.ESCAPE and plain then
@@ -330,6 +422,14 @@ local function handle_key(code, cap)
     if tab_is_down() then switch_tree() end
   elseif ctrl_only and code == KEY.CTRL_N then
     create_branch()
+  elseif ctrl_only and code == KEY.CTRL_C then
+    copy("Copied")
+  elseif ctrl_only and code == KEY.CTRL_X then
+    if in_organized() then copy("Cut") else speak("Not available here") end
+  elseif ctrl_only and code == KEY.CTRL_V then
+    paste()
+  elseif code == KEY.DELETE and plain then
+    delete()
   elseif not plain then
     -- Other modified keys arrive in later build steps.
   elseif code == KEY.PAGE_UP then

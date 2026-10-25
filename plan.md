@@ -43,6 +43,7 @@ Decision: use `reaper.GetUserInputs`, REAPER's own dialog. It needs little code 
 
 - Track effects on all tracks, plus the master track.
 - Take (item) effects are excluded from the first version.
+- REAPER 7 containers are shown nested (Rich's choice): a container appears like an effect; inside it come the effects it holds (containers nested to any depth), then the container's own parameters. The organized tree mirrors this; the user's branches inside a container always follow its effects. Effects inside containers are addressed with the IDs from the `container_item.N` named config parameter.
 
 ## Data model
 

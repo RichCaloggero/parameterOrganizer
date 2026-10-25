@@ -1,8 +1,9 @@
--- The organized tree: tracks and effects mirrored from the source tree,
--- with the user's branches (and, from build step 6, parameters) inside
--- each effect. Plain Lua with no REAPER calls.
+-- The organized tree: tracks and effects mirrored from the source tree
+-- (containers hold their effects, at any depth), with the user's branches
+-- and parameters inside each effect. Plain Lua with no REAPER calls.
 
 local tree = require("tree")
+local autolabel = require("autolabel")
 
 local M = {}
 
@@ -17,29 +18,50 @@ local function find_by_guid(children, kind, guid)
   return nil
 end
 
--- Brings the organized tree's track and effect levels in line with the
--- source tree: new tracks and effects are added, missing ones removed,
--- order and labels follow the source, and each surviving effect keeps
--- its branches. Pass nil to build a new organized tree.
-function M.sync(organized_root, source_root)
-  organized_root = organized_root or tree.new_node("root", "")
-  local old_tracks = organized_root.children
-  organized_root.children = {}
+-- True for a parameter placed in this effect's part of the organized tree
+-- (and not in an effect nested inside it, when this one is a container).
+local function belongs_to(node, fx_node)
+  return node.kind == "param" and node.data.fx_guid == fx_node.data.guid
+end
 
-  for _, source_track in ipairs(source_root.children) do
-    local track = find_by_guid(old_tracks, "track", source_track.data.guid) or mirror(source_track)
-    track.label, track.data = source_track.label, source_track.data
-    local old_fx = track.children
-    track.children = {}
-    tree.add_child(organized_root, track)
+-- Mirrors source_node's tracks and effects (recursively, for containers)
+-- under org_node. Mirrored nodes come first, in the source's order; the
+-- user's own items (branches and parameters) follow, in their own order.
+local function sync_children(org_node, source_node)
+  local old = org_node.children
+  local user_items = {}
+  for _, child in ipairs(old) do
+    if child.kind == "branch" or child.kind == "param" then user_items[#user_items + 1] = child end
+  end
+  org_node.children = {}
 
-    for _, source_fx in ipairs(source_track.children) do
-      local fx = find_by_guid(old_fx, "fx", source_fx.data.guid) or mirror(source_fx)
-      fx.label, fx.data = source_fx.label, source_fx.data
-      tree.add_child(track, fx)
+  for _, s in ipairs(source_node.children) do
+    if s.kind == "track" or s.kind == "fx" then
+      local n = find_by_guid(old, s.kind, s.data.guid) or mirror(s)
+      n.label, n.data = s.label, s.data
+      tree.add_child(org_node, n)
+      sync_children(n, s)
     end
   end
+  for _, item in ipairs(user_items) do tree.add_child(org_node, item) end
 
+  if org_node.kind == "fx" then
+    -- The effect may have moved in the chain: its placed parameters follow.
+    tree.walk(org_node, function(n)
+      if belongs_to(n, org_node) then
+        n.data.track, n.data.fx = org_node.data.track, org_node.data.fx
+      end
+    end)
+  end
+end
+
+-- Brings the organized tree's tracks and effects (including effects inside
+-- containers, at any depth) in line with the source tree: new ones are
+-- added, missing ones removed, order and labels follow the source, and each
+-- surviving effect keeps its branches. Pass nil to build a new tree.
+function M.sync(organized_root, source_root)
+  organized_root = organized_root or tree.new_node("root", "")
+  sync_children(organized_root, source_root)
   return organized_root
 end
 
@@ -55,8 +77,120 @@ function M.can_rename(node)
   return node ~= nil and (node.kind == "branch" or node.kind == "param")
 end
 
+-- Inside a container, the effects it holds always come first, so a new
+-- item goes after them even when one of them is focused.
+local function skip_mirrored(cursor)
+  local count = 0
+  for _, child in ipairs(cursor.container.children) do
+    if child.kind ~= "fx" then break end
+    count = count + 1
+  end
+  if cursor.index < count then cursor.index = count end
+end
+
 function M.create_branch(cursor, name)
+  skip_mirrored(cursor)
   return tree.insert_after_focus(cursor, tree.new_node("branch", name))
 end
+
+---------------------------------------------------------------------------
+-- Parameters in the organized tree
+--
+-- A placed parameter's data copies the source parameter's (track, fx,
+-- fx_guid, index, original_name) and may add user_label, set with F2.
+
+-- Labels of the branches between the effect and the node, outermost first.
+function M.branch_path(node)
+  local path = {}
+  local p = node.parent
+  while p and p.kind == "branch" do
+    table.insert(path, 1, p.label)
+    p = p.parent
+  end
+  return path
+end
+
+-- The label a parameter shows: the user's own, or the autolabel.
+function M.param_label(node)
+  if node.data.user_label then return node.data.user_label end
+  return autolabel.label(node.data.original_name, M.branch_path(node))
+end
+
+-- Recomputes the labels of all parameters under node, after a paste,
+-- a move or a branch rename.
+function M.refresh_labels(node)
+  tree.walk(node, function(n)
+    if n.kind == "param" then n.label = M.param_label(n) end
+  end)
+end
+
+-- The placed copy of fx_node's parameter index, if any.
+function M.find_placed(fx_node, index)
+  return tree.walk(fx_node, function(n)
+    return belongs_to(n, fx_node) and n.data.index == index
+  end)
+end
+
+-- The organized effect node for an effect guid.
+function M.find_fx(organized_root, fx_guid)
+  return tree.walk(organized_root, function(n)
+    return n.kind == "fx" and n.data.guid == fx_guid
+  end)
+end
+
+-- Control+V: places the parameter whose data is given at the current
+-- level, after the focused item. Each parameter appears only once, so one
+-- that is already placed is moved. Returns the placed node and, for a
+-- move, the branch path it came from; or nil and a reason to speak.
+function M.paste(cursor, data)
+  if not M.can_create_branch(cursor) then return nil, "Not available here" end
+  local fx_node = tree.enclosing(cursor.container, "fx")
+  if fx_node.data.guid ~= data.fx_guid then
+    return nil, "This parameter belongs to another effect"
+  end
+
+  local node = M.find_placed(fx_node, data.index)
+  local moved_from
+  if node then
+    moved_from = M.branch_path(node)
+  else
+    node = tree.new_node("param", "", {
+      track = fx_node.data.track,
+      fx = fx_node.data.fx,
+      fx_guid = data.fx_guid,
+      index = data.index,
+      original_name = data.original_name,
+    })
+  end
+
+  skip_mirrored(cursor)
+  if not tree.insert_after_focus(cursor, node) then return nil, "Not available here" end
+  node.label = M.param_label(node)
+  return node, moved_from
+end
+
+-- F2 on a parameter: a name of its own, or "" to go back to the autolabel.
+function M.rename_param(node, name)
+  node.data.user_label = name ~= "" and name or nil
+  node.label = M.param_label(node)
+end
+
+-- F2 on a branch: its parameters' autolabels follow the new name.
+function M.rename_branch(node, name)
+  node.label = name
+  M.refresh_labels(node)
+end
+
+-- How many parameters a branch holds, at any depth.
+function M.count_params(node)
+  local count = 0
+  tree.walk(node, function(n)
+    if n.kind == "param" then count = count + 1 end
+  end)
+  return count
+end
+
+-- Delete: only the user's items can be removed.
+M.can_delete = M.can_rename
 
 return M

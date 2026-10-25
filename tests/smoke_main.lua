@@ -5,7 +5,8 @@
 local K = {
   UP = 30064, DOWN = 1685026670, LEFT = 1818584692, RIGHT = 1919379572,
   HOME = 6647396, END = 1752132965, TAB = 9, F2 = 26162, F5 = 26165,
-  F12 = 6697266, ESCAPE = 27, CTRL_N = 14,
+  F12 = 6697266, ESCAPE = 27, CTRL_N = 14, DELETE = 6579564,
+  C = 3, V = 22,   -- as Control+C and Control+V arrive
 }
 local CTRL, SHIFT = 4, 8
 
@@ -23,9 +24,22 @@ local keys = {
   { K.LEFT }, { K.LEFT },
   { K.TAB, CTRL },                         -- back to the source tree
   { K.F12 }, { K.DOWN, SHIFT }, { K.ESCAPE },
+  -- Step 6: copy Depth, paste it into a branch, rename, delete.
+  { K.RIGHT }, { K.DOWN },                 -- source: Phaser, then Depth
+  { K.C, CTRL },                           -- copy Depth
+  { K.TAB, CTRL },                         -- organized: back in Phaser
+  { K.RIGHT }, { K.DOWN },                 -- frequency, then Q factor
+  { K.RIGHT },                             -- into empty Q factor
+  { K.V, CTRL },                           -- paste: Depth
+  { K.F2 }, { K.F2 },                      -- own name, then back to autolabel
+  { K.TAB, CTRL }, { K.TAB, CTRL },        -- source says where Depth is placed
+  { K.LEFT },                              -- Q factor
+  { K.DELETE }, { K.DELETE },              -- ask, then delete
+  { K.TAB, CTRL },                         -- source: Depth unplaced again
+  { K.V, CTRL },                           -- not in the source tree
   { K.ESCAPE },                            -- quit
 }
-local answers = { "frequency", "Q", "Q factor" }
+local answers = { "frequency", "Q", "Q factor", "Mix depth", "" }
 
 local tracks = {
   { name = "Vocals", number = 1, guid = "{T1}", fx = {

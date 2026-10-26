@@ -12,7 +12,7 @@ local function type_at(x)
   return TYPES[math.min(5, math.floor(x * 5) + 1)]
 end
 local function fake(kind, normalized)
-  param = { kind = kind, normalized = normalized, set_calls = 0 }
+  param = { kind = kind, normalized = normalized, set_calls = 0, last_asked = normalized }
 end
 
 -- Stepped: values 0 to 4 in steps of 1, large step 2.
@@ -45,11 +45,24 @@ reaper = {
     if param.kind == "no_format" then return false, "" end
     -- Like ValhallaVintageVerb: ignores x and describes the current setting.
     if param.kind == "ignores_x" then return true, type_at(param.normalized) end
+    -- Answers the question before this one, so 0 and 1 still differ.
+    if param.kind == "answers_late" then
+      local asked = param.last_asked
+      param.last_asked = x
+      return true, type_at(asked)
+    end
     return true, string.format("%.1f dB", -60 + 72 * x)
   end,
   TrackFX_GetFormattedParamValue = function()
     if param.kind == "no_format" then return false, "" end
-    if param.kind == "ignores_x" then return true, type_at(param.normalized) end
+    if param.kind == "ignores_x" or param.kind == "answers_late" then
+      return true, type_at(param.normalized)
+    end
+    -- Answers questions exactly, but really snaps to steps of 0.02.
+    if param.kind == "snaps" then
+      local snapped = math.floor(param.normalized / 0.02 + 1e-9) * 0.02
+      return true, string.format("%.1f dB", -60 + 72 * snapped)
+    end
     return true, string.format("%.1f dB", -60 + 72 * param.normalized)
   end,
 }
@@ -163,6 +176,26 @@ test("plugin that ignores the question: typed word still works", function()
   check_equal(type_at(param.normalized), "Room")
   check_equal(reaper_fx.set_value_from_text(node, "spring"), false)
   check_equal(type_at(param.normalized), "Room", "unchanged after no match")
+end)
+
+test("plugin that answers the previous question: steps still find the next choice", function()
+  fake("answers_late", 0.1)
+  param.last_asked = 0.9
+  reaper_fx.step_value(node, 1, false)
+  check_equal(type_at(param.normalized), "Bright Hall", "next")
+  reaper_fx.step_value(node, -1, false)
+  check_equal(type_at(param.normalized), "Concert Hall", "back")
+end)
+
+test("plugin whose real display differs from its answers: one press still changes it", function()
+  fake("snaps", 0.5)
+  local _, before = reaper.TrackFX_GetFormattedParamValue()
+  reaper_fx.step_value(node, 1, false)
+  local _, after = reaper.TrackFX_GetFormattedParamValue()
+  check_equal(after ~= before, true, "changed up")
+  reaper_fx.step_value(node, -1, false)
+  local _, back = reaper.TrackFX_GetFormattedParamValue()
+  check_equal(back ~= after, true, "changed down")
 end)
 
 reaper = nil

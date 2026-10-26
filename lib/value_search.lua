@@ -7,6 +7,7 @@ local M = {}
 local SEARCH_STEPS = 40
 local TEXT_SAMPLES = 1000
 local SCAN_STEP = 0.001
+M.SCAN_STEP = SCAN_STEP
 
 -- The number in a display text such as "2.50 kHz", "-6.0 dB" or "-inf",
 -- in base units: a "k" straight after the number multiplies by 1000,

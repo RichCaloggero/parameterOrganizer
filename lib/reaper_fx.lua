@@ -196,25 +196,36 @@ local SMALL_STEP, LARGE_STEP = 0.01, 0.1
 -- Returns format_at(x): what the plugin displays at setting x (0 to 1),
 -- or nil when it can't say; and whether format_at is "live".
 --
--- Normally the plugin is asked without changing anything. Some plugins
--- (ValhallaVintageVerb, for one) answer every such question with their
--- current display, so that is checked first: if settings 0 and 1 would
--- display the same, format_at instead sets x and reads the real display.
+-- Normally the plugin is asked without changing anything. Many plugins
+-- answer such questions wrongly: with their current display (Valhalla
+-- plugins, for one), or with the answer to an earlier question. So the
+-- answers are checked first: settings 0 and 1 must differ, and the
+-- answer for the current setting, asked after both, must match the real
+-- display. Otherwise format_at sets x and reads the real display.
 -- A live search must finish by setting the final value, or the original.
+local function real_display(d)
+  local ok, shown = reaper.TrackFX_GetFormattedParamValue(d.track, d.fx, d.index, "")
+  if ok and shown ~= "" then return shown end
+  return nil
+end
+
+local function live_format_at(d)
+  return function(x)
+    reaper.TrackFX_SetParamNormalized(d.track, d.fx, d.index, x)
+    return real_display(d)
+  end
+end
+
 local function format_at_for(d)
   local function query(x)
     local ok, shown = reaper.TrackFX_FormatParamValueNormalized(d.track, d.fx, d.index, x, "")
     if ok and shown ~= "" then return shown end
     return nil
   end
-  if query(0) ~= query(1) then return query, false end
-
-  return function(x)
-    reaper.TrackFX_SetParamNormalized(d.track, d.fx, d.index, x)
-    local ok, shown = reaper.TrackFX_GetFormattedParamValue(d.track, d.fx, d.index, "")
-    if ok and shown ~= "" then return shown end
-    return nil
-  end, true
+  local current = reaper.TrackFX_GetParamNormalized(d.track, d.fx, d.index)
+  local at0, at1 = query(0), query(1)
+  if at0 ~= at1 and query(current) == real_display(d) then return query, false end
+  return live_format_at(d), true
 end
 
 -- Moves a parameter one step up (direction 1) or down (direction -1).
@@ -249,8 +260,9 @@ function M.step_value(node, direction, large)
     reaper.TrackFX_SetParam(d.track, d.fx, d.index, new)
   else
     local value = reaper.TrackFX_GetParamNormalized(d.track, d.fx, d.index)
+    local before = real_display(d)
     local size = large and LARGE_STEP or SMALL_STEP
-    local format_at = format_at_for(d)
+    local format_at, live = format_at_for(d)
     local new = value_search.step_until_changed(value, direction, size, format_at)
     if new == nil then
       -- The plugin can't describe settings: a plain step.
@@ -259,6 +271,15 @@ function M.step_value(node, direction, large)
     -- false means no change is possible; a live search may have moved the
     -- parameter while looking, so put the original back.
     reaper.TrackFX_SetParamNormalized(d.track, d.fx, d.index, new or value)
+
+    -- A plugin's answers can differ from what it then really displays (it
+    -- rounds or snaps the setting): if the display didn't change, carry
+    -- on from there in the smallest steps, setting and reading.
+    if new and not live and before and real_display(d) == before then
+      local further = value_search.step_until_changed(new, direction, value_search.SCAN_STEP, live_format_at(d))
+      if further == nil then further = new end
+      reaper.TrackFX_SetParamNormalized(d.track, d.fx, d.index, further or value)
+    end
   end
 end
 

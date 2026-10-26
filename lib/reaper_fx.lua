@@ -92,8 +92,6 @@ end
 
 local function add_track(root, track, is_master)
   local fx_count = reaper.TrackFX_GetCount(track)
-  if fx_count == 0 then return end
-
   local track_node = tree.add_child(root, tree.new_node("track", track_label(track, is_master), {
     track = track,
     guid = reaper.GetTrackGUID(track),
@@ -105,7 +103,8 @@ local function add_track(root, track, is_master)
 end
 
 -- Builds the source tree: master, then each track, each with its effects
--- and their parameters. Tracks without effects are left out.
+-- and their parameters. Tracks without effects are included, so effects
+-- can be pasted onto them.
 function M.build_source_tree()
   local root = tree.new_node("root", "")
   add_track(root, reaper.GetMasterTrack(0), true)
@@ -154,11 +153,17 @@ local function chain_index(track, guid)
 end
 
 -- Moves (or copies) the effect with src_guid on src_track to dest_track,
--- straight after the effect with after_guid. Returns the guid of the effect
--- in its new place, or nil when either effect is gone.
+-- straight after the effect with after_guid, or first when after_guid is
+-- nil. Returns the guid of the effect in its new place, or nil when an
+-- effect or track is gone.
 function M.place_fx(src_track, src_guid, dest_track, after_guid, is_move)
   local src = chain_index(src_track, src_guid)
-  local after = chain_index(dest_track, after_guid)
+  local after = -1
+  if after_guid then
+    after = chain_index(dest_track, after_guid)
+  elseif not reaper.ValidatePtr2(0, dest_track, "MediaTrack*") then
+    after = nil
+  end
   if not src or not after then return nil end
   local same_track = src_track == dest_track
   if is_move and same_track and src == after then return src_guid end
@@ -168,6 +173,12 @@ function M.place_fx(src_track, src_guid, dest_track, after_guid, is_move)
   if is_move and same_track and src < after then dest = after end
   reaper.TrackFX_CopyToTrack(src_track, src, dest_track, dest, is_move)
   return reaper.TrackFX_GetFXGUID(dest_track, dest)
+end
+
+-- Removes the effect with this guid from the track's chain, if it is there.
+function M.delete_fx(track, guid)
+  local index = chain_index(track, guid)
+  if index then reaper.TrackFX_Delete(track, index) end
 end
 
 -- The value of a parameter as the plugin displays it, such as "350 Hz".

@@ -124,9 +124,12 @@ local tracks = {
 local master = { name = "", number = -1, guid = "{M}", fx = {} }
 
 local clock, key_index, answer_index, next_key_at
--- REAPER's current (last touched) track, where the script starts.
-local touched
+-- REAPER's current (last touched) track, where the script starts; without
+-- one it would start on the master track.
+local touched = tracks[1]
 local spoken, deferred, extstate = {}, {}, {}
+-- What Control+Shift+F leaves behind: the selected track, the FX browser.
+local selected_track, browser_open
 
 local function param(t, fx, p) return t.fx[fx + 1], p + 1 end
 
@@ -139,6 +142,12 @@ reaper = {
   HasExtState = function(_, k) return extstate[k] ~= nil end,
   GetExtState = function(_, k) return extstate[k] or "" end,
   SetExtState = function(_, k, v) extstate[k] = v end,
+  DeleteExtState = function(_, k) extstate[k] = nil end,
+  SetOnlyTrackSelected = function(t) selected_track = t end,
+  GetToggleCommandState = function() return browser_open and 1 or 0 end,
+  Main_OnCommand = function(id)
+    if id == 40271 then browser_open = not browser_open end
+  end,
   GetUserInputs = function()
     answer_index = answer_index + 1
     return true, answers[answer_index] or ""
@@ -156,6 +165,7 @@ reaper = {
     if key == "I_FXEN" then t.chain_bypassed = v == 0 end
   end,
   ValidatePtr2 = function() return true end,
+  TrackFX_Delete = function(t, fx) table.remove(t.fx, fx + 1) end,
   Undo_BeginBlock = function() end,
   Undo_EndBlock = function() end,
   -- As in REAPER, the effect ends up at position d, counted after taking
@@ -212,6 +222,11 @@ gfx = {
     key_index = key_index + 1
     local key = keys[key_index]
     if not key then return -1 end
+    -- A function stands for something done outside the script.
+    if type(key) == "function" then
+      key()
+      return 0
+    end
     gfx.mouse_cap = key[2] or 0
     return key[1]
   end,
@@ -263,6 +278,7 @@ local function chains()
 end
 print("Session 4")
 table.insert(tracks[2].fx, { name = "JS: Delay", guid = "{F3}", params = { "Time" }, values = { 0.3 } })
+tracks[3] = { name = "Keys", number = 3, guid = "{T3}", fx = {} }
 session({
   { K.B, CTRL | SHIFT },                   -- Track 2 effects bypassed
   { K.UP }, { K.DOWN },                    -- Track 2 says effects bypassed
@@ -278,7 +294,24 @@ session({
   { K.LEFT }, { K.HOME, CTRL },            -- the first Phaser
   { K.X, CTRL }, { K.END, CTRL },          -- cut it, then the last item
   { K.V, CTRL },                           -- moved to the end of the chain
+  { K.LEFT }, { K.END, CTRL },             -- Track 1, then the last track: empty Track 3
+  { K.RIGHT }, { K.V, CTRL },              -- empty; the Phaser moves there
+  { K.LEFT }, { K.UP }, { K.RIGHT },       -- Track 2, Phaser
+  { K.C, CTRL }, { K.LEFT }, { K.DOWN },   -- copy it; Track 3
+  { K.RIGHT }, { K.V, CTRL },              -- a copy after Track 3's Phaser
+  { K.F, CTRL | SHIFT },                   -- FX browser for Track 3, silently
+  function()                               -- in the browser: add a Delay, close it
+    table.insert(tracks[3].fx, { name = "JS: Delay", guid = "{F4}", params = { "Time" }, values = { 0.5 } })
+    browser_open = false
+  end,                                     -- back in the script, on the new Delay
+  { K.DELETE }, { K.DELETE },              -- ask, then delete it: on the Phaser before it
+  { K.F, CTRL | SHIFT },                   -- the browser again, and quit while it's open
   { K.ESCAPE },
 })
 chains()
 print("Track 2 chain bypassed:", tracks[2].chain_bypassed)
+print("Selected:", selected_track and selected_track.name, "browser open:", browser_open)
+
+-- Session 5: the next start lands on Track 3, though Track 2 is current.
+print("Session 5")
+session({ { K.ESCAPE } })

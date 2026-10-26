@@ -301,19 +301,19 @@ local function refresh()
   speak("Refreshed. " .. describe_focused(true))
 end
 
--- The window's title is a non-breaking space, so the screen reader has
--- nothing to announce when the window gains focus (a plain space makes it
--- start to say "unknown"). The script speaks the greeting itself, once,
--- when its window first has focus: the name and the item it starts on.
--- Nothing is spoken on closing.
-local WINDOW_TITLE = "\u{00A0}"
+-- The screen reader announces the window's title whenever it gains focus:
+-- at startup, after a dialog and after the FX browser. That is the whole
+-- greeting; the script adds nothing of its own, so nothing competes with
+-- it. (A blank title made the screen reader say "unknown" whenever focus
+-- came back.) Nothing is spoken on closing.
+local WINDOW_TITLE = "Parameter Organizer"
 
 local function open_window()
   gfx.init(WINDOW_TITLE, 1, 1, 0, -32000, -32000)
 end
 
--- The window, for js_ReaScriptAPI to give focus back to. A blank title
--- can't be searched for, so it is noted the first time the window has focus.
+-- The window, for js_ReaScriptAPI to give focus back to: noted the first
+-- time the window has focus, or found by its title.
 local window_hwnd
 
 -- Windows does not always return focus to the script's window after a
@@ -327,6 +327,7 @@ local function window_has_focus()
 end
 
 local function refocus_window()
+  if not window_hwnd and reaper.JS_Window_Find then window_hwnd = reaper.JS_Window_Find(WINDOW_TITLE, true) end
   if window_hwnd and reaper.JS_Window_SetFocus then
     reaper.JS_Window_SetFocus(window_hwnd)
     return
@@ -452,18 +453,19 @@ local function cut(copying)
   speak(#nodes == 1 and "Cut " .. nodes[1].label or #nodes .. " cut")
 end
 
--- Control+V with effects: on a track's level, after the focused effect, in
--- the order cut. One undo point covers them all. Moved effects stay on the
--- clipboard at their new place, so pasting again moves them again.
+-- Control+V with effects: on a track's level, after the focused effect (or
+-- into an empty track), in the order cut. One undo point covers them all.
+-- Moved effects stay on the clipboard at their new place, so pasting
+-- again moves them again.
 local function paste_effects()
   local track_node, focused = cursor.container, tree.focused(cursor)
-  if track_node.kind ~= "track" or not (focused and focused.kind == "fx") then
+  if track_node.kind ~= "track" or (focused and focused.kind ~= "fx") then
     speak("Not available here")
     return
   end
   selection.clear(sel)
   local dest = track_node.data.track
-  local after, pasted = focused.data.guid, 0
+  local after, pasted = focused and focused.data.guid, 0
   reaper.Undo_BeginBlock()
   for _, item in ipairs(clipboard) do
     local guid = reaper_fx.place_fx(item.track, item.guid, dest, after, not clipboard.copying)
@@ -549,8 +551,55 @@ end
 -- parameters rejoin the effect's default branch.
 local pending_delete
 
+-- Delete on a track's level: the selected effects, or the focused one,
+-- after asking. One undo point covers them all. Effects inside containers
+-- can't be deleted here yet, as they can't be cut.
+local function delete_effects()
+  local nodes = selection.nodes(sel)
+  if #nodes == 0 then nodes = { tree.focused(cursor) } end
+  local guids = {}
+  for i, node in ipairs(nodes) do
+    if node.kind ~= "fx" then
+      speak("Delete effects or parameters, not both")
+      return
+    elseif node.parent.kind ~= "track" then
+      speak("Not available inside a container")
+      return
+    end
+    guids[i] = node.data.guid
+  end
+  local name = #nodes == 1 and announce.name(nodes[1]) or #nodes .. " effects"
+  -- The same effects must be asked about and confirmed.
+  local key = table.concat(guids, " ")
+  if pending_delete ~= key then
+    pending_delete = key
+    speak("Delete " .. name .. "? Press Delete again to confirm")
+    return
+  end
+  pending_delete = nil
+  reaper.Undo_BeginBlock()
+  for _, node in ipairs(nodes) do reaper_fx.delete_fx(node.data.track, node.data.guid) end
+  reaper.Undo_EndBlock("Delete effects", -1)
+  selection.clear(sel)
+  reload()
+  -- Focus what took the place of the focused effect, or the new last one.
+  if tree.contains(organized_root, cursor.container) then
+    local count = #cursor.container.children
+    cursor.index = math.min(math.max(cursor.index, 1), count)
+  else
+    cursor = tree.new_cursor(organized_root)
+  end
+  speak("Deleted " .. name .. ". " .. describe_focused(true))
+end
+
 local function delete()
   local node = tree.focused(cursor)
+  -- The selection, when there is one, decides whether effects are deleted.
+  local first = selection.nodes(sel)[1] or node
+  if not in_list() and first and first.kind == "fx" then
+    delete_effects()
+    return
+  end
   if in_list() or not organizer.can_delete(node) then
     speak("Not available here")
     return
@@ -917,6 +966,70 @@ local function toggle_track_bypass()
   if reaper_fx.toggle_chain_bypass(node) then speak(node.label .. " effects bypassed") end
 end
 
+-- The track the next start lands on, after Control+Shift+F, kept in
+-- ExtState only until REAPER closes.
+local RETURN_TRACK_KEY = "return_track"
+local FX_BROWSER_ACTION = 40271  -- View: Show FX browser window
+
+-- While the FX browser is open: the track it adds to and the guids of the
+-- effects that track had, so new ones can be found when it closes.
+local browser_watch
+
+-- Control+Shift+F: REAPER's FX browser, adding to the focused track or the
+-- one the cursor is in, which becomes the only selected track. When the
+-- browser closes, the script takes focus back (see return_from_browser);
+-- if it is restarted instead, it starts on that track.
+-- Nothing is spoken: the browser announces itself.
+local function open_fx_browser()
+  local node = tree.focused(cursor)
+  if not (node and node.kind == "track") then node = not in_list() and tree.enclosing(cursor.container, "track") end
+  if in_list() or not node then
+    speak("Not available here")
+    return
+  end
+  reaper.SetOnlyTrackSelected(node.data.track)
+  reaper.SetExtState(EXTSTATE_SECTION, RETURN_TRACK_KEY, node.data.guid, false)
+  -- The action toggles the browser: when it is already open, close it
+  -- first so that opening it again gives it focus.
+  if reaper.GetToggleCommandState(FX_BROWSER_ACTION) == 1 then reaper.Main_OnCommand(FX_BROWSER_ACTION, 0) end
+  reaper.Main_OnCommand(FX_BROWSER_ACTION, 0)
+  browser_watch = { guid = node.data.guid, before = {} }
+  for _, child in ipairs(node.children) do
+    if child.kind == "fx" then browser_watch.before[child.data.guid] = true end
+  end
+end
+
+-- The FX browser has closed: refresh, take focus back, and land on the
+-- first effect it added, or else on the track.
+local function return_from_browser()
+  local watch = browser_watch
+  browser_watch = nil
+  reaper.DeleteExtState(EXTSTATE_SECTION, RETURN_TRACK_KEY, false)
+  reload()
+  local track_node
+  for _, node in ipairs(organized_root.children) do
+    if node.kind == "track" and node.data.guid == watch.guid then track_node = node end
+  end
+  if track_node then
+    local target = track_node
+    for _, child in ipairs(track_node.children) do
+      if child.kind == "fx" and not watch.before[child.data.guid] then
+        target = child
+        break
+      end
+    end
+    selection.clear(sel)
+    tree.focus_node(cursor, target)
+  elseif not tree.contains(organized_root, cursor.container) or cursor.index > #cursor.container.children then
+    cursor = tree.new_cursor(organized_root)
+  end
+  -- Speech waits until the window has focus again.
+  awaiting_focus = true
+  speak(describe_focused(true))
+  refocus_window()
+  refocus_check_at = reaper.time_precise() + REFOCUS_DELAY
+end
+
 -- Right: entering an effect whose default branch is filtered says so, so
 -- the hidden parameters aren't taken for missing.
 local function enter()
@@ -1055,6 +1168,8 @@ local function handle_key(code, cap)
     toggle_bypass()
   elseif ctrl_shift and code == KEY.CTRL_B then
     toggle_track_bypass()
+  elseif ctrl_shift and code == KEY.CTRL_F then
+    open_fx_browser()
   elseif code == KEY.DELETE and plain then
     delete()
   elseif not plain then
@@ -1097,6 +1212,10 @@ local function loop()
     end
   end
 
+  if browser_watch and reaper.GetToggleCommandState(FX_BROWSER_ACTION) ~= 1 then
+    return_from_browser()
+  end
+
   if refocus_check_at and reaper.time_precise() >= refocus_check_at then
     refocus_check_at = nil
     if not window_has_focus() then refocus_window() end
@@ -1122,12 +1241,17 @@ if reaper.set_action_options then
   reaper.set_action_options(1 | 2)
 end
 
--- Starts on REAPER's current track (the last touched one, which is not
--- the same as the selection), when it has effects and so is in the tree.
+-- Starts on the track Control+Shift+F opened the FX browser for, if any,
+-- or else on REAPER's current track (the last touched one, which is not
+-- the same as the selection).
 local function focus_current_track()
-  local track = reaper.GetLastTouchedTrack and reaper.GetLastTouchedTrack()
-  if not track then return end
-  local guid = reaper.GetTrackGUID(track)
+  local guid = reaper.GetExtState(EXTSTATE_SECTION, RETURN_TRACK_KEY)
+  reaper.DeleteExtState(EXTSTATE_SECTION, RETURN_TRACK_KEY, false)
+  if guid == "" then
+    local track = reaper.GetLastTouchedTrack and reaper.GetLastTouchedTrack()
+    if not track then return end
+    guid = reaper.GetTrackGUID(track)
+  end
   for _, node in ipairs(organized_root.children) do
     if node.kind == "track" and node.data.guid == guid then
       tree.focus_node(cursor, node)
@@ -1138,13 +1262,6 @@ end
 
 load_trees()
 focus_current_track()
--- The greeting waits, like speech after a dialog, until the window has focus.
-awaiting_focus = true
-if tree.focused(cursor) then
-  speak("Parameter organizer, " .. describe_focused(false))
-else
-  speak("Parameter organizer, no effects in this project. F5 refreshes, Escape quits")
-end
 open_window()
 reaper.atexit(gfx.quit)
 reaper.defer(loop)

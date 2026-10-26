@@ -6,7 +6,7 @@ Everything is spoken through OSARA. The script runs in a tiny hidden window that
 
 ## What it does
 
-- **One tree:** every track that has effects (the master track first), each effect on it, and inside each effect its parameters. Effects inside REAPER 7 containers are shown nested inside their container.
+- **One tree:** every track (the master track first), each effect on it, and inside each effect its parameters. Effects inside REAPER 7 containers are shown nested inside their container.
 - **Use it as it is, or organize:** a small plugin is fine as it comes. For a busy one, you can sort and filter its parameters, or go further and create branches of your own and move parameters into them. For example, a stereo phaser could become freq, then min and max, then left and right.
 - **The default branch:** inside an effect, your branches come first. After them come the parameters you haven't placed in a branch yet, in the plugin's own order. This list is called the default branch. You can sort and filter it, and always get back to the original order.
 - **Autolabels:** a parameter placed in branches is renamed by removing the words of the branches above it. "left Q attack", placed under the branches Q and attack, becomes simply "left".
@@ -29,7 +29,7 @@ Run the script from your shortcut, not from the ReaScript editor. Pressing the s
 
 ## Getting started
 
-1. Press your shortcut. You hear "Parameter organizer" and the item you're on. You start on REAPER's current track (the last one you moved to or touched, even when several are selected), if it has effects; otherwise on the first track.
+1. Press your shortcut. Your screen reader says "Parameter Organizer", the window's name; press an arrow key to hear where you are. You start on REAPER's current track (the last one you moved to or touched, even when several are selected), or else on the master track.
 2. Use Up and Down to reach a track, Right to go into it, Right again to go into an effect, then Up and Down to hear its parameters and their values.
 3. Press Control+F and type a word, such as "freq". Only the parameters containing it are left, and you hear how many match.
 4. Press Control+A to select them all, then Control+X to cut them.
@@ -108,7 +108,7 @@ Cut and paste work the same in both modes. Parameters selected from several plac
 - **F2:** rename the focused branch, or a parameter you have placed in a branch. Clearing a parameter's name gives it back its autolabel.
 - **Delete:** return a placed parameter to the default branch. On a branch with anything in it, you're asked first: press Delete again to confirm, and its parameters return to the default branch.
 
-Tracks and effects mirror your project, so they can't be renamed or deleted here.
+Tracks and effects mirror your project, so they can't be renamed here, and tracks can't be deleted.
 
 ### Moving and copying effects
 
@@ -116,9 +116,12 @@ On a track's level, where its effects are, cut and paste work on effects, within
 
 - **Control+X:** cut the selected effects, or the focused one. They stay where they are until you paste.
 - **Control+C:** copy them instead. Each paste then adds new copies.
-- **Control+V:** paste after the focused effect, in the order you cut them, and land on the last one pasted. Moved effects can be pasted again to move them on. Each paste is one step in REAPER's undo history.
+- **Control+V:** paste after the focused effect, in the order you cut them, and land on the last one pasted. To paste onto a track with no effects, go into it with Right (it says "empty") and paste there. Moved effects can be pasted again to move them on. Each paste is one step in REAPER's undo history.
 
-Effects inside containers can't be cut yet, and effects can't be pasted into a container or onto a track with no effects, since such a track isn't in the tree.
+- **Delete:** delete the selected effects, or the focused one. You're asked first: press Delete again to confirm. Each delete is one step in REAPER's undo history.
+- **Control+Shift+F:** open REAPER's FX browser to add a new effect to the track you're on or inside. That track becomes the only selected one, so the browser adds to it. When you close the browser, the script takes focus back and lands on the first effect you added, or on the track if you added none. If you press your shortcut for the script instead, it starts on that track.
+
+Effects inside containers can't be cut or deleted yet, and effects can't be pasted into a container.
 
 ## Named orderings
 

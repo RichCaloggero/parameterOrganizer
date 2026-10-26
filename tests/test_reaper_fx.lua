@@ -60,16 +60,17 @@ local function labels(node)
   return table.concat(list, "|")
 end
 
-test("source tree: master first, empty tracks left out", function()
+test("source tree: master first, empty tracks included", function()
   local root = reaper_fx.build_source_tree()
-  check_equal(labels(root), "Master|Track 1 Vocals|Track 3|Track 4 Bus")
+  check_equal(labels(root), "Master|Track 1 Vocals|Track 2|Track 3|Track 4 Bus")
+  check_equal(#root.children[3].children, 0, "empty track")
 end)
 
 test("source tree: plugin type prefixes are removed", function()
   local root = reaper_fx.build_source_tree()
   check_equal(labels(root.children[1]), "Limiter (Acme)")
   check_equal(labels(root.children[2]), "Stereo Phaser")
-  check_equal(labels(root.children[3]), "Synth|Drums: comp")
+  check_equal(labels(root.children[4]), "Synth|Drums: comp")
 end)
 
 test("source tree: parameters with their indexes", function()
@@ -104,7 +105,7 @@ test("identity survives a rebuild", function()
 end)
 
 test("containers hold their effects first, then their own parameters", function()
-  local container = reaper_fx.build_source_tree().children[4].children[1]
+  local container = reaper_fx.build_source_tree().children[5].children[1]
   check_equal(container.data.is_container, true, "is container")
   check_equal(labels(container), "ReaEQ (Cockos)|Inner|Bypass|Wet|Delta")
   local inner = container.children[2]

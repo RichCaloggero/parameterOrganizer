@@ -114,13 +114,13 @@ local function value_of(node)
   return reaper_fx.formatted_value(node)
 end
 
--- A bypassed effect says so after its name, and a track whose whole
--- chain is bypassed says "effects bypassed".
+-- A bypassed effect says so before its name, and a track whose whole
+-- chain is bypassed says "bypassed" before its name too.
 local function describe_focused(with_state)
   local node = tree.focused(cursor)
   local text = announce.describe(node, with_state, value_of)
-  if node and node.kind == "fx" and reaper_fx.is_bypassed(node) then text = text .. " bypassed" end
-  if node and node.kind == "track" and reaper_fx.is_chain_bypassed(node) then text = text .. " effects bypassed" end
+  if node and node.kind == "fx" and reaper_fx.is_bypassed(node) then text = "bypassed " .. text end
+  if node and node.kind == "track" and reaper_fx.is_chain_bypassed(node) then text = "bypassed " .. text end
   return text
 end
 
@@ -953,7 +953,7 @@ local function toggle_bypass()
     speak("Not available here")
     return
   end
-  if reaper_fx.toggle_bypass(node) then speak(announce.name(node) .. " bypassed") end
+  if reaper_fx.toggle_bypass(node) then speak("bypassed " .. announce.name(node)) end
 end
 
 -- Control+Shift+B: bypass the whole effect chain of the focused track, or
@@ -966,7 +966,7 @@ local function toggle_track_bypass()
     speak("Not available here")
     return
   end
-  if reaper_fx.toggle_chain_bypass(node) then speak(node.label .. " effects bypassed") end
+  if reaper_fx.toggle_chain_bypass(node) then speak("bypassed " .. node.label) end
 end
 
 -- The track the next start lands on, after Control+Shift+F, kept in

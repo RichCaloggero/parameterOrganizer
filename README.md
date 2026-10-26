@@ -49,8 +49,8 @@ Run the script from your shortcut, not from the ReaScript editor. Pressing the s
 - **Control+Home and Control+End:** always the first or last item.
 - **Control+T:** back to the effect's own level from anywhere inside it, landing on the branch you were in.
 - **A letter or digit:** the next item at this level starting with it.
-- **Control+B:** bypass the effect you're on or inside, or bring it back. Bypassing says the effect's name and "bypassed"; bringing it back says nothing. Inside a container, on one of its own branches or parameters, that's the container. A bypassed effect says "bypassed" after its name whenever you land on it.
-- **Control+Shift+B:** bypass every effect on the track you're on or inside, or bring them back, like B in OSARA (the track's FX button). Bypassing says the track's name and "effects bypassed"; bringing them back says nothing. Such a track says "effects bypassed" after its name whenever you land on it.
+- **Control+B:** bypass the effect you're on or inside, or bring it back. Bypassing says "bypassed" and the effect's name; bringing it back says nothing. Inside a container, on one of its own branches or parameters, that's the container. A bypassed effect says "bypassed" before its name whenever you land on it.
+- **Control+Shift+B:** bypass every effect on the track you're on or inside, or bring them back, like B in OSARA (the track's FX button). Bypassing says "bypassed" and the track's name; bringing them back says nothing. Such a track says "bypassed" before its name whenever you land on it.
 - **Control+Tab:** the named orderings for the effect you're in. See "Named orderings" below.
 - **F5:** refresh from the project, after adding, removing or moving effects.
 - **F12:** open the settings list.

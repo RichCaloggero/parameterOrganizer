@@ -148,7 +148,27 @@ reaper = {
   CountTracks = function() return #tracks end,
   GetTrack = function(_, i) return tracks[i + 1] end,
   GetTrackGUID = function(t) return t.guid end,
-  GetMediaTrackInfo_Value = function(t) return t.number end,
+  GetMediaTrackInfo_Value = function(t, key)
+    if key == "I_FXEN" then return t.chain_bypassed and 0 or 1 end
+    return t.number
+  end,
+  SetMediaTrackInfo_Value = function(t, key, v)
+    if key == "I_FXEN" then t.chain_bypassed = v == 0 end
+  end,
+  ValidatePtr2 = function() return true end,
+  Undo_BeginBlock = function() end,
+  Undo_EndBlock = function() end,
+  -- As in REAPER, the effect ends up at position d, counted after taking
+  -- it out when moving within one chain. A copy gets a new guid.
+  TrackFX_CopyToTrack = function(src, s, dest, d, move)
+    local fx = src.fx[s + 1]
+    if move then
+      table.remove(src.fx, s + 1)
+    else
+      fx = { name = fx.name, guid = fx.guid .. " copy", params = fx.params, values = { table.unpack(fx.values) } }
+    end
+    table.insert(dest.fx, d + 1, fx)
+  end,
   GetSetMediaTrackInfo_String = function(t) return true, t.name end,
   TrackFX_GetCount = function(t) return #t.fx end,
   TrackFX_GetEnabled = function(t, fx) return not t.fx[fx + 1].bypassed end,
@@ -158,7 +178,7 @@ reaper = {
   TrackFX_GetNumParams = function(t, fx) return #t.fx[fx + 1].params end,
   TrackFX_GetParamName = function(t, fx, p) local f, i = param(t, fx, p) return true, f.params[i] end,
   TrackFX_GetNamedConfigParm = function(t, fx, name)
-    if name == "fx_ident" then return true, "JS: Phaser plugin file" end
+    if name == "fx_ident" then return true, t.fx[fx + 1].name .. " plugin file" end
     return false, ""
   end,
   GetResourcePath = function() return resource end,
@@ -231,3 +251,34 @@ session({
   { K.RIGHT }, { K.RIGHT }, { K.RIGHT },   -- Track 2's Phaser, frequency, Rate 70%
   { K.ESCAPE },
 })
+
+-- Session 4: Track 2 also has a Delay. Bypass Track 2's chain, then move
+-- and copy effects between and within tracks.
+local function chains()
+  for _, t in ipairs(tracks) do
+    local names = {}
+    for _, fx in ipairs(t.fx) do names[#names + 1] = fx.name .. " " .. fx.guid end
+    print(t.name .. ":", table.concat(names, ", "))
+  end
+end
+print("Session 4")
+table.insert(tracks[2].fx, { name = "JS: Delay", guid = "{F3}", params = { "Time" }, values = { 0.3 } })
+session({
+  { K.B, CTRL | SHIFT },                   -- Track 2 effects bypassed
+  { K.UP }, { K.DOWN },                    -- Track 2 says effects bypassed
+  { K.B, CTRL | SHIFT },                   -- back, silently
+  { K.RIGHT }, { K.DOWN },                 -- Phaser, Delay
+  { K.X, CTRL },                           -- cut Delay
+  { K.LEFT }, { K.UP }, { K.RIGHT },       -- Track 1's Phaser
+  { K.V, CTRL },                           -- Delay moved after it
+  { K.UP }, { K.C, CTRL },                 -- copy Phaser
+  { K.DOWN }, { K.V, CTRL },               -- a copy after Delay
+  { K.RIGHT }, { K.V, CTRL },              -- inside an effect: not available
+  -- Session 1 set Home and End to standard: Control+Home is the first item.
+  { K.LEFT }, { K.HOME, CTRL },            -- the first Phaser
+  { K.X, CTRL }, { K.END, CTRL },          -- cut it, then the last item
+  { K.V, CTRL },                           -- moved to the end of the chain
+  { K.ESCAPE },
+})
+chains()
+print("Track 2 chain bypassed:", tracks[2].chain_bypassed)

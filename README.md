@@ -50,6 +50,7 @@ Run the script from your shortcut, not from the ReaScript editor. Pressing the s
 - **Control+T:** back to the effect's own level from anywhere inside it, landing on the branch you were in.
 - **A letter or digit:** the next item at this level starting with it.
 - **Control+B:** bypass the effect you're on or inside, or bring it back. Bypassing says the effect's name and "bypassed"; bringing it back says nothing. Inside a container, on one of its own branches or parameters, that's the container. A bypassed effect says "bypassed" after its name whenever you land on it.
+- **Control+Shift+B:** bypass every effect on the track you're on or inside, or bring them back, like B in OSARA (the track's FX button). Bypassing says the track's name and "effects bypassed"; bringing them back says nothing. Such a track says "effects bypassed" after its name whenever you land on it.
 - **Control+Tab:** the named orderings for the effect you're in. See "Named orderings" below.
 - **F5:** refresh from the project, after adding, removing or moving effects.
 - **F12:** open the settings list.
@@ -109,6 +110,16 @@ Cut and paste work the same in both modes. Parameters selected from several plac
 
 Tracks and effects mirror your project, so they can't be renamed or deleted here.
 
+### Moving and copying effects
+
+On a track's level, where its effects are, cut and paste work on effects, within one track or between tracks, without the FX browser:
+
+- **Control+X:** cut the selected effects, or the focused one. They stay where they are until you paste.
+- **Control+C:** copy them instead. Each paste then adds new copies.
+- **Control+V:** paste after the focused effect, in the order you cut them, and land on the last one pasted. Moved effects can be pasted again to move them on. Each paste is one step in REAPER's undo history.
+
+Effects inside containers can't be cut yet, and effects can't be pasted into a container or onto a track with no effects, since such a track isn't in the tree.
+
 ## Named orderings
 
 Each plugin can have several saved organizations, called orderings. One of them is active, and every copy of the plugin shows it.
@@ -160,7 +171,7 @@ A container appears like an effect, with "container" after its name. Go into it 
 - Filtering and sorting work only on the default branch, not inside your own branches.
 - Unplaced parameters can't be renamed. Place a parameter in a branch to rename it.
 - Branches can't be cut and moved.
-- If an effect is moved to another track while the script is open, it's treated as new, and it gets its saved layout again after F5.
+- An effect moved to another track is treated as new: it gets its saved layout again (after F5, when moved outside the script), but loses a filter or sort.
 
 ## For developers
 

@@ -130,6 +130,46 @@ function M.toggle_bypass(fx_node)
   return bypassed
 end
 
+-- The track's whole effect chain bypassed (its FX button, which OSARA's B
+-- toggles), read from REAPER each time like an effect's bypass.
+function M.is_chain_bypassed(track_node)
+  return reaper.GetMediaTrackInfo_Value(track_node.data.track, "I_FXEN") == 0
+end
+
+-- Bypasses the track's effect chain, or brings it back. Returns the new state.
+function M.toggle_chain_bypass(track_node)
+  local bypassed = not M.is_chain_bypassed(track_node)
+  reaper.SetMediaTrackInfo_Value(track_node.data.track, "I_FXEN", bypassed and 0 or 1)
+  return bypassed
+end
+
+-- The position of the effect with this guid in the track's chain, or nil.
+-- Effects are found by guid, since positions change as they move.
+local function chain_index(track, guid)
+  if not reaper.ValidatePtr2(0, track, "MediaTrack*") then return nil end
+  for i = 0, reaper.TrackFX_GetCount(track) - 1 do
+    if reaper.TrackFX_GetFXGUID(track, i) == guid then return i end
+  end
+  return nil
+end
+
+-- Moves (or copies) the effect with src_guid on src_track to dest_track,
+-- straight after the effect with after_guid. Returns the guid of the effect
+-- in its new place, or nil when either effect is gone.
+function M.place_fx(src_track, src_guid, dest_track, after_guid, is_move)
+  local src = chain_index(src_track, src_guid)
+  local after = chain_index(dest_track, after_guid)
+  if not src or not after then return nil end
+  local same_track = src_track == dest_track
+  if is_move and same_track and src == after then return src_guid end
+  -- REAPER puts the effect at dest, counted after taking it out when it
+  -- moves within the chain: from ahead of after, that is after's place.
+  local dest = after + 1
+  if is_move and same_track and src < after then dest = after end
+  reaper.TrackFX_CopyToTrack(src_track, src, dest_track, dest, is_move)
+  return reaper.TrackFX_GetFXGUID(dest_track, dest)
+end
+
 -- The value of a parameter as the plugin displays it, such as "350 Hz".
 function M.formatted_value(node)
   local d = node.data

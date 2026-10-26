@@ -8,7 +8,8 @@
 -- One tree: tracks, their effects, and inside each effect the user's
 -- branches followed by the effect's unplaced parameters (the default
 -- branch), which Control+F filters, Control+G sorts and Control+R reverts.
--- Control+X and Control+V move parameters into branches.
+-- Control+X and Control+V move parameters into branches, and effects
+-- within and between tracks.
 -- Control+Tab opens the effect's named orderings; F12 the settings list.
 
 local script_dir = debug.getinfo(1, "S").source:match("^@(.*[/\\])") or ""
@@ -110,11 +111,13 @@ local function value_of(node)
   return reaper_fx.formatted_value(node)
 end
 
--- A bypassed effect says so after its name.
+-- A bypassed effect says so after its name, and a track whose whole
+-- chain is bypassed says "effects bypassed".
 local function describe_focused(with_state)
   local node = tree.focused(cursor)
   local text = announce.describe(node, with_state, value_of)
   if node and node.kind == "fx" and reaper_fx.is_bypassed(node) then text = text .. " bypassed" end
+  if node and node.kind == "track" and reaper_fx.is_chain_bypassed(node) then text = text .. " effects bypassed" end
   return text
 end
 
@@ -279,13 +282,18 @@ local function refresh_default_branch(fx_node)
   return count
 end
 
--- F5: rebuild from the project. The tree keeps its nodes (and the user's
--- branches) for tracks and effects that still exist, so the cursor stays
--- put unless its item was removed.
-local function refresh()
+-- Rebuilds from the project. The tree keeps its nodes (and the user's
+-- branches) for tracks and effects that still exist.
+local function reload()
   source_root = reaper_fx.build_source_tree()
   organizer.sync(organized_root, source_root)
   load_layouts()
+end
+
+-- F5: rebuild from the project. The cursor stays put unless its item was
+-- removed.
+local function refresh()
+  reload()
   local c = cursor
   if not tree.contains(organized_root, c.container) or c.index > #c.container.children then
     cursor = tree.new_cursor(organized_root)
@@ -389,10 +397,31 @@ end
 -- Control+X (and Control+C): remember the selected parameters, or else the
 -- focused one, for Control+V. A parameter appears only once in the tree,
 -- so pasting moves it; until then it stays where it is.
--- clipboard is a list of parameter data, in the order heard when cut.
+-- clipboard is a list of parameter data, in the order heard when cut; or,
+-- with clipboard.effects set, of effects (see cut_effects).
 local clipboard
 
-local function cut()
+-- Effects on a track's level: Control+X moves them when pasted, Control+C
+-- copies them. Effects inside containers can't be cut yet.
+local function cut_effects(nodes, copying)
+  for _, node in ipairs(nodes) do
+    if node.kind ~= "fx" then
+      speak("Cut effects or parameters, not both")
+      return
+    elseif node.parent.kind ~= "track" then
+      speak("Not available inside a container")
+      return
+    end
+  end
+  clipboard = { effects = true, copying = copying }
+  for i, node in ipairs(nodes) do
+    clipboard[i] = { track = node.data.track, guid = node.data.guid }
+  end
+  local verb = copying and "Copied" or "Cut"
+  speak(#nodes == 1 and verb .. " " .. announce.name(nodes[1]) or #nodes .. " " .. verb:lower())
+end
+
+local function cut(copying)
   local nodes = selection.nodes(sel)
   if #nodes == 0 then
     local node = tree.focused(cursor)
@@ -401,6 +430,10 @@ local function cut()
       return
     end
     nodes = { node }
+  end
+  if nodes[1].kind == "fx" then
+    cut_effects(nodes, copying)
+    return
   end
   for _, node in ipairs(nodes) do
     if node.kind ~= "param" then
@@ -419,6 +452,36 @@ local function cut()
   speak(#nodes == 1 and "Cut " .. nodes[1].label or #nodes .. " cut")
 end
 
+-- Control+V with effects: on a track's level, after the focused effect, in
+-- the order cut. One undo point covers them all. Moved effects stay on the
+-- clipboard at their new place, so pasting again moves them again.
+local function paste_effects()
+  local track_node, focused = cursor.container, tree.focused(cursor)
+  if track_node.kind ~= "track" or not (focused and focused.kind == "fx") then
+    speak("Not available here")
+    return
+  end
+  selection.clear(sel)
+  local dest = track_node.data.track
+  local after, pasted = focused.data.guid, 0
+  reaper.Undo_BeginBlock()
+  for _, item in ipairs(clipboard) do
+    local guid = reaper_fx.place_fx(item.track, item.guid, dest, after, not clipboard.copying)
+    if guid then
+      if not clipboard.copying then item.track, item.guid = dest, guid end
+      after, pasted = guid, pasted + 1
+    end
+  end
+  reaper.Undo_EndBlock(clipboard.copying and "Copy effects" or "Move effects", -1)
+  if pasted == 0 then
+    speak("Nothing to paste")
+    return
+  end
+  reload()
+  tree.focus_node(cursor, organizer.find_fx(organized_root, after))
+  speak(pasted == 1 and describe_focused(true) or pasted .. " pasted")
+end
+
 -- Control+V. In a branch, places the parameter there. At the effect's own
 -- level, returns it to unplaced (the default branch). When a paste
 -- empties a filtered default branch, the filter has done its job: clear it.
@@ -429,6 +492,10 @@ local function paste()
   end
   if not clipboard then
     speak("Nothing to paste")
+    return
+  end
+  if clipboard.effects then
+    paste_effects()
     return
   end
   selection.clear(sel)
@@ -837,6 +904,19 @@ local function toggle_bypass()
   if reaper_fx.toggle_bypass(node) then speak(announce.name(node) .. " bypassed") end
 end
 
+-- Control+Shift+B: bypass the whole effect chain of the focused track, or
+-- else the one the cursor is in, or bring it back, as OSARA's B does.
+-- Spoken like Control+B: only bypassing, with the track's name.
+local function toggle_track_bypass()
+  local node = tree.focused(cursor)
+  if not (node and node.kind == "track") then node = not in_list() and tree.enclosing(cursor.container, "track") end
+  if in_list() or not node then
+    speak("Not available here")
+    return
+  end
+  if reaper_fx.toggle_chain_bypass(node) then speak(node.label .. " effects bypassed") end
+end
+
 -- Right: entering an effect whose default branch is filtered says so, so
 -- the hidden parameters aren't taken for missing.
 local function enter()
@@ -868,6 +948,7 @@ local function handle_key(code, cap)
   local plain = cap & (MOD_CTRL | MOD_SHIFT | MOD_ALT) == 0
   local shift_only = cap & (MOD_CTRL | MOD_SHIFT | MOD_ALT) == MOD_SHIFT
   local ctrl_only = cap & (MOD_CTRL | MOD_SHIFT | MOD_ALT) == MOD_CTRL
+  local ctrl_shift = cap & (MOD_CTRL | MOD_SHIFT | MOD_ALT) == MOD_CTRL | MOD_SHIFT
 
   -- Home and End follow the "Home and End" setting. When swapped (for
   -- keyboards where Home sits below End), the lower key goes down, like
@@ -959,7 +1040,7 @@ local function handle_key(code, cap)
   elseif ctrl_only and code == KEY.CTRL_N then
     create_branch()
   elseif ctrl_only and (code == KEY.CTRL_X or code == KEY.CTRL_C) then
-    cut()
+    cut(code == KEY.CTRL_C)
   elseif ctrl_only and code == KEY.CTRL_V then
     paste()
   elseif ctrl_only and code == KEY.CTRL_F then
@@ -972,6 +1053,8 @@ local function handle_key(code, cap)
     to_effect_level()
   elseif ctrl_only and code == KEY.CTRL_B then
     toggle_bypass()
+  elseif ctrl_shift and code == KEY.CTRL_B then
+    toggle_track_bypass()
   elseif code == KEY.DELETE and plain then
     delete()
   elseif not plain then

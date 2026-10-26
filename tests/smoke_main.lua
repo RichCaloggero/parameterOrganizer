@@ -233,7 +233,8 @@ gfx = {
 }
 
 local function session(session_keys)
-  keys, clock, key_index, answer_index, next_key_at = session_keys, 0, 0, 0, 1
+  -- The first key waits two seconds, past the greeting's one-second pause.
+  keys, clock, key_index, answer_index, next_key_at = session_keys, 0, 0, 0, 2
   spoken = {}
   package.loaded.storage, package.loaded.layout = nil, nil
   dofile("ParameterOrganizer.lua")

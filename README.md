@@ -29,7 +29,7 @@ Run the script from your shortcut, not from the ReaScript editor. Pressing the s
 
 ## Getting started
 
-1. Press your shortcut. Your screen reader says "Parameter Organizer", the window's name; press an arrow key to hear where you are. You start on REAPER's current track (the last one you moved to or touched, even when several are selected), or else on the master track.
+1. Press your shortcut. Your screen reader says "Parameter Organizer", the window's name, and a second later you hear the item you're on. You start on REAPER's current track (the last one you moved to or touched, even when several are selected), or else on the master track.
 2. Use Up and Down to reach a track, Right to go into it, Right again to go into an effect, then Up and Down to hear its parameters and their values.
 3. Press Control+F and type a word, such as "freq". Only the parameters containing it are left, and you hear how many match.
 4. Press Control+A to select them all, then Control+X to cut them.

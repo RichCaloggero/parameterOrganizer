@@ -70,8 +70,11 @@ local sel = selection.new()
 -- After a dialog, speech is held until focus is back in the script's
 -- window (the loop delivers it), so it isn't lost while focus is elsewhere.
 -- Only the latest message is kept. No fixed delay is added: speech rates
--- vary too much for one delay to suit everyone.
-local AFTER_DIALOG_DELAY = 0
+-- vary too much for one delay to suit everyone. The one exception is the
+-- greeting at startup, which waits STARTUP_DELAY seconds after focus so the
+-- screen reader can say the window's title first.
+local STARTUP_DELAY = 1
+local hold_delay = 0
 local awaiting_focus, held_speech, focus_seen_at = false, nil, nil
 
 -- Something to say before the next message, such as a new ordering
@@ -98,8 +101,8 @@ local function deliver_held_speech(has_focus)
   end
   local now = reaper.time_precise()
   focus_seen_at = focus_seen_at or now
-  if now - focus_seen_at < AFTER_DIALOG_DELAY then return end
-  awaiting_focus, focus_seen_at = false, nil
+  if now - focus_seen_at < hold_delay then return end
+  awaiting_focus, focus_seen_at, hold_delay = false, nil, 0
   if held_speech then reaper.osara_outputMessage(held_speech) end
   held_speech = nil
 end
@@ -302,10 +305,10 @@ local function refresh()
 end
 
 -- The screen reader announces the window's title whenever it gains focus:
--- at startup, after a dialog and after the FX browser. That is the whole
--- greeting; the script adds nothing of its own, so nothing competes with
--- it. (A blank title made the screen reader say "unknown" whenever focus
--- came back.) Nothing is spoken on closing.
+-- at startup, after a dialog and after the FX browser. At startup the
+-- script then names the item it starts on, a second later. (A blank title
+-- made the screen reader say "unknown" whenever focus came back.) Nothing
+-- is spoken on closing.
 local WINDOW_TITLE = "Parameter Organizer"
 
 local function open_window()
@@ -1202,7 +1205,7 @@ local function loop()
 
   if code > 0 then
     -- A key press means the user has moved on: drop held speech.
-    awaiting_focus, held_speech, focus_seen_at = false, nil, nil
+    awaiting_focus, held_speech, focus_seen_at, hold_delay = false, nil, nil, 0
     -- REAPER returns floats; tree and key lookups want integers.
     code = math.tointeger(code) or code
     local cap = math.tointeger(gfx.mouse_cap) or 0
@@ -1262,6 +1265,10 @@ end
 
 load_trees()
 focus_current_track()
+-- The greeting: the item the script starts on, once the screen reader has
+-- had time to say the window's title. A key press before then drops it.
+awaiting_focus, hold_delay = true, STARTUP_DELAY
+speak(describe_focused(false))
 open_window()
 reaper.atexit(gfx.quit)
 reaper.defer(loop)

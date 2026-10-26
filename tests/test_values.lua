@@ -11,6 +11,13 @@ local TYPES = { "Concert Hall", "Bright Hall", "Plate", "Room", "Chamber" }
 local function type_at(x)
   return TYPES[math.min(5, math.floor(x * 5) + 1)]
 end
+-- Three choices, the middle one only 0.002 wide.
+local function narrow_at(x)
+  if x < 0.5 then return "Small" end
+  if x < 0.502 then return "Medium" end
+  return "Large"
+end
+
 local function fake(kind, normalized)
   param = { kind = kind, normalized = normalized, set_calls = 0, last_asked = normalized }
 end
@@ -45,6 +52,7 @@ reaper = {
     if param.kind == "no_format" then return false, "" end
     -- Like ValhallaVintageVerb: ignores x and describes the current setting.
     if param.kind == "ignores_x" then return true, type_at(param.normalized) end
+    if param.kind == "narrow" then return true, narrow_at(x) end
     -- Answers the question before this one, so 0 and 1 still differ.
     if param.kind == "answers_late" then
       local asked = param.last_asked
@@ -58,6 +66,7 @@ reaper = {
     if param.kind == "ignores_x" or param.kind == "answers_late" then
       return true, type_at(param.normalized)
     end
+    if param.kind == "narrow" then return true, narrow_at(param.normalized) end
     -- Answers questions exactly, but really snaps to steps of 0.02.
     if param.kind == "snaps" then
       local snapped = math.floor(param.normalized / 0.02 + 1e-9) * 0.02
@@ -196,6 +205,22 @@ test("plugin whose real display differs from its answers: one press still change
   reaper_fx.step_value(node, -1, false)
   local _, back = reaper.TrackFX_GetFormattedParamValue()
   check_equal(back ~= after, true, "changed down")
+end)
+
+test("plugin that ignores the question: a distant choice takes few tries", function()
+  fake("ignores_x", 0.0)
+  reaper_fx.step_value(node, 1, false)
+  check_equal(type_at(param.normalized), "Bright Hall", "next")
+  check_equal(param.set_calls < 30, true, "tries: " .. param.set_calls)
+end)
+
+test("a very narrow choice is not jumped over", function()
+  fake("narrow", 0.1)
+  reaper_fx.step_value(node, 1, false)
+  check_equal(narrow_at(param.normalized), "Medium", "up")
+  fake("narrow", 0.9)
+  reaper_fx.step_value(node, -1, false)
+  check_equal(narrow_at(param.normalized), "Medium", "down")
 end)
 
 reaper = nil

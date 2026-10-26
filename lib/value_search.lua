@@ -64,17 +64,29 @@ function M.step_until_changed(x, direction, size, format_at)
   local target = math.max(0, math.min(1, x + direction * size))
   if format_at(target) ~= current then return target end
 
-  local t = target
+  -- Jump further each time, starting small so a nearby change is found
+  -- at once and a distant one in few tries.
+  local same, jump = target, SCAN_STEP
+  local changed
   while true do
-    t = t + direction * SCAN_STEP
-    if t < 0 or t > 1 then
-      -- Past the end: the end itself may still show a different choice.
-      local edge = direction > 0 and 1 or 0
-      if format_at(edge) ~= current then return edge end
-      return false
+    local t = same + direction * jump
+    -- Past the end: the end itself may still show a different choice.
+    if t < 0 or t > 1 then t = direction > 0 and 1 or 0 end
+    if format_at(t) ~= current then
+      changed = t
+      break
     end
-    if format_at(t) ~= current then return t end
+    if t == 0 or t == 1 then return false end
+    same, jump = t, jump * 2
   end
+
+  -- Narrow down between the last setting that looked the same and the
+  -- first that didn't, to the first different one.
+  while math.abs(changed - same) > SCAN_STEP do
+    local mid = (same + changed) / 2
+    if format_at(mid) ~= current then changed = mid else same = mid end
+  end
+  return changed
 end
 
 -- For displays such as "Sine" or "Off": the first setting whose display

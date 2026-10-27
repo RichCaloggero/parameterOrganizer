@@ -142,6 +142,14 @@ function M.toggle_chain_bypass(track_node)
   return bypassed
 end
 
+-- Mutes the track, or unmutes it. Returns the new state.
+function M.toggle_mute(track_node)
+  local track = track_node.data.track
+  local muted = reaper.GetMediaTrackInfo_Value(track, "B_MUTE") == 0
+  reaper.SetMediaTrackInfo_Value(track, "B_MUTE", muted and 1 or 0)
+  return muted
+end
+
 -- The position of the effect with this guid in the track's chain, or nil.
 -- Effects are found by guid, since positions change as they move.
 local function chain_index(track, guid)

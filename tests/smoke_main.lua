@@ -8,7 +8,7 @@
 local K = {
   UP = 30064, DOWN = 1685026670, LEFT = 1818584692, RIGHT = 1919379572,
   HOME = 6647396, END = 1752132965, PAGE_UP = 1885828464, PAGE_DOWN = 1885824110,
-  F2 = 26162, F12 = 6697266, ESCAPE = 27, DELETE = 6579564,
+  F2 = 26162, F5 = 26165, F12 = 6697266, ESCAPE = 27, DELETE = 6579564,
   TAB = 9, ENTER = 13,
   -- As Control+letter arrives:
   CTRL_N = 14, A = 1, B = 2, C = 3, F = 6, K = 11, G = 7, R = 18, T = 20, V = 22, X = 24,
@@ -159,10 +159,12 @@ reaper = {
   GetTrackGUID = function(t) return t.guid end,
   GetMediaTrackInfo_Value = function(t, key)
     if key == "I_FXEN" then return t.chain_bypassed and 0 or 1 end
+    if key == "B_MUTE" then return t.muted and 1 or 0 end
     return t.number
   end,
   SetMediaTrackInfo_Value = function(t, key, v)
     if key == "I_FXEN" then t.chain_bypassed = v == 0 end
+    if key == "B_MUTE" then t.muted = v == 1 end
   end,
   ValidatePtr2 = function() return true end,
   TrackFX_Delete = function(t, fx) table.remove(t.fx, fx + 1) end,
@@ -284,7 +286,9 @@ session({
   { K.B, CTRL | SHIFT },                   -- Track 2 effects bypassed
   { K.UP }, { K.DOWN },                    -- Track 2 says effects bypassed
   { K.B, CTRL | SHIFT },                   -- back, silently
+  { K.F5 }, { K.F5 },                      -- Track 2 muted, then unmuted
   { K.RIGHT }, { K.DOWN },                 -- Phaser, Delay
+  { K.F5 },                                -- inside Track 2: muted
   { K.X, CTRL },                           -- cut Delay
   { K.LEFT }, { K.UP }, { K.RIGHT },       -- Track 1's Phaser
   { K.V, CTRL },                           -- Delay moved after it
@@ -310,7 +314,7 @@ session({
   { K.ESCAPE },
 })
 chains()
-print("Track 2 chain bypassed:", tracks[2].chain_bypassed)
+print("Track 2 chain bypassed:", tracks[2].chain_bypassed, "muted:", tracks[2].muted)
 print("Selected:", selected_track and selected_track.name, "browser open:", browser_open)
 
 -- Session 5: the next start lands on Track 3, though Track 2 is current.

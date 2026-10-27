@@ -31,7 +31,7 @@ local KEY = {
   UP = 30064, DOWN = 1685026670, LEFT = 1818584692, RIGHT = 1919379572,
   HOME = 6647396, END = 1752132965,
   PAGE_UP = 1885828464, PAGE_DOWN = 1885824110,
-  ENTER = 13, TAB = 9, SPACE = 32, F2 = 26162, F12 = 6697266, ESCAPE = 27,
+  ENTER = 13, TAB = 9, SPACE = 32, F2 = 26162, F5 = 26165, F12 = 6697266, ESCAPE = 27,
   DELETE = 6579564,
   CTRL_A = 1, CTRL_B = 2, CTRL_C = 3, CTRL_F = 6, CTRL_G = 7, CTRL_K = 11, CTRL_N = 14, CTRL_R = 18, CTRL_T = 20, CTRL_V = 22, CTRL_X = 24,
 }
@@ -969,6 +969,18 @@ local function toggle_track_bypass()
   if reaper_fx.toggle_chain_bypass(node) then speak("bypassed " .. node.label) end
 end
 
+-- F5: mute the focused track, or else the one the cursor is in, or unmute
+-- it. REAPER's own F5 can't be reached while the script has focus.
+local function toggle_mute()
+  local node = tree.focused(cursor)
+  if not (node and node.kind == "track") then node = not in_list() and tree.enclosing(cursor.container, "track") end
+  if in_list() or not node then
+    speak("Not available here")
+    return
+  end
+  speak(reaper_fx.toggle_mute(node) and "muted" or "unmuted")
+end
+
 -- The track the next start lands on, after Control+Shift+F, kept in
 -- ExtState only until REAPER closes.
 local RETURN_TRACK_KEY = "return_track"
@@ -1177,6 +1189,8 @@ local function handle_key(code, cap)
     refresh()
   elseif code == KEY.DELETE and plain then
     delete()
+  elseif code == KEY.F5 and plain then
+    toggle_mute()
   elseif not plain then
     -- Other modified keys do nothing.
   elseif code == KEY.ENTER then

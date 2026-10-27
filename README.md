@@ -52,6 +52,7 @@ Run the script from your shortcut, not from the ReaScript editor. Pressing the s
 - **Control+B:** bypass the effect you're on or inside, or bring it back. Bypassing says "bypassed" and the effect's name; bringing it back says nothing. Inside a container, on one of its own branches or parameters, that's the container. A bypassed effect says "bypassed" before its name whenever you land on it.
 - **Control+Shift+B:** bypass every effect on the track you're on or inside, or bring them back, like B in OSARA (the track's FX button). Bypassing says "bypassed" and the track's name; bringing them back says nothing. Such a track says "bypassed" before its name whenever you land on it.
 - **Control+Tab:** the named orderings for the effect you're in. See "Named orderings" below.
+- **F5:** mute the track you're on or inside, or unmute it, like F5 in REAPER, which can't be reached while the script has focus. Says "muted" or "unmuted".
 - **Control+Shift+R:** refresh from the project, after adding, removing or moving effects.
 - **F12:** open the settings list.
 - **Escape:** clear the selection, if there is one. Otherwise, quit.

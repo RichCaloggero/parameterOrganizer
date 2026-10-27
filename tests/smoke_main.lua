@@ -8,7 +8,7 @@
 local K = {
   UP = 30064, DOWN = 1685026670, LEFT = 1818584692, RIGHT = 1919379572,
   HOME = 6647396, END = 1752132965, PAGE_UP = 1885828464, PAGE_DOWN = 1885824110,
-  F2 = 26162, F5 = 26165, F12 = 6697266, ESCAPE = 27, DELETE = 6579564,
+  F2 = 26162, F12 = 6697266, ESCAPE = 27, DELETE = 6579564,
   TAB = 9, ENTER = 13,
   -- As Control+letter arrives:
   CTRL_N = 14, A = 1, B = 2, C = 3, F = 6, K = 11, G = 7, R = 18, T = 20, V = 22, X = 24,
@@ -96,7 +96,7 @@ local keys = {
   { K.F2 },                                -- Original can't be renamed
   { K.ESCAPE },                            -- close the list
   { K.F12 }, { K.PAGE_DOWN }, { K.ESCAPE }, -- change a setting
-  { K.F5 },                                -- refresh keeps the place
+  { K.R, CTRL + SHIFT },                    -- refresh keeps the place
   { K.ESCAPE },                            -- quit
 }
 local answers = { "frequency", "Q", "Q factor", "dep", "Mix depth", "", "both", "both/inner/deep", "Both", "Spare", "Spare 2" }

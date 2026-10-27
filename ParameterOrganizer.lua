@@ -31,7 +31,7 @@ local KEY = {
   UP = 30064, DOWN = 1685026670, LEFT = 1818584692, RIGHT = 1919379572,
   HOME = 6647396, END = 1752132965,
   PAGE_UP = 1885828464, PAGE_DOWN = 1885824110,
-  ENTER = 13, TAB = 9, SPACE = 32, F2 = 26162, F5 = 26165, F12 = 6697266, ESCAPE = 27,
+  ENTER = 13, TAB = 9, SPACE = 32, F2 = 26162, F12 = 6697266, ESCAPE = 27,
   DELETE = 6579564,
   CTRL_A = 1, CTRL_B = 2, CTRL_C = 3, CTRL_F = 6, CTRL_G = 7, CTRL_K = 11, CTRL_N = 14, CTRL_R = 18, CTRL_T = 20, CTRL_V = 22, CTRL_X = 24,
 }
@@ -194,7 +194,7 @@ local function apply_active(fx_node)
 end
 
 -- Gives every organized effect that doesn't have its layout yet its
--- active ordering (new effects appear at startup and after F5).
+-- active ordering (new effects appear at startup and after Control+Shift+R).
 local function load_layouts()
   tree.walk(organized_root, function(n)
     if n.kind == "fx" and not n.layout_loaded then
@@ -293,7 +293,7 @@ local function reload()
   load_layouts()
 end
 
--- F5: rebuild from the project. The cursor stays put unless its item was
+-- Control+Shift+R: rebuild from the project. The cursor stays put unless its item was
 -- removed.
 local function refresh()
   reload()
@@ -1173,6 +1173,8 @@ local function handle_key(code, cap)
     toggle_track_bypass()
   elseif ctrl_shift and code == KEY.CTRL_F then
     open_fx_browser()
+  elseif ctrl_shift and code == KEY.CTRL_R and not in_list() then
+    refresh()
   elseif code == KEY.DELETE and plain then
     delete()
   elseif not plain then
@@ -1189,8 +1191,6 @@ local function handle_key(code, cap)
     enter()
   elseif code == KEY.LEFT then
     if tree.leave(cursor) then speak_focused(false) end
-  elseif code == KEY.F5 and not in_list() then
-    refresh()
   elseif code == KEY.F2 then
     rename()
   elseif code > 32 and code < 127 then

@@ -61,7 +61,7 @@ Decision: use `reaper.GetUserInputs`, REAPER's own dialog. It needs little code 
 - Plugins are keyed by REAPER's plugin identifier (`fx_ident` named config parameter), not by the instance name.
 - Files live in `ParameterOrganizer/layouts` inside the REAPER resource path, one plain-text file per plugin type (`lib/layout.lua` describes the format).
 - Exception: a container's own parameters depend on that container, so its layout is saved in the project (project ExtState), keyed by the container's GUID, and kept when the project is saved.
-- Layouts load at startup and when F5 finds new effects.
+- Layouts load at startup and when Control+Shift+R finds new effects.
 - Parameters are stored by index plus original name. On load, if the name at that index doesn't match, the script searches by name. If it still can't find the parameter, it marks it "missing" and announces that.
 - Saving happens after every change.
 - Consequence: the same plugin on two tracks shows the same branches. Editing the layout under one changes both, at once. Values stay per instance.
@@ -79,7 +79,7 @@ Decision: use `reaper.GetUserInputs`, REAPER's own dialog. It needs little code 
 - Home and End: last and first item at the current level, by default. The "Home and End" setting (F12; default swapped, because Home sits below End on Rich's keyboard) reverses Home and End everywhere they are used.
 - A letter key: jump to the next item at this level starting with that letter.
 - Control+Tab: switch trees and announce which one is now active.
-- F5: rebuild from the project.
+- Control+Shift+R: rebuild from the project.
 - Escape: quit.
 
 ### Values, on any parameter in either tree

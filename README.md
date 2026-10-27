@@ -52,7 +52,7 @@ Run the script from your shortcut, not from the ReaScript editor. Pressing the s
 - **Control+B:** bypass the effect you're on or inside, or bring it back. Bypassing says "bypassed" and the effect's name; bringing it back says nothing. Inside a container, on one of its own branches or parameters, that's the container. A bypassed effect says "bypassed" before its name whenever you land on it.
 - **Control+Shift+B:** bypass every effect on the track you're on or inside, or bring them back, like B in OSARA (the track's FX button). Bypassing says "bypassed" and the track's name; bringing them back says nothing. Such a track says "bypassed" before its name whenever you land on it.
 - **Control+Tab:** the named orderings for the effect you're in. See "Named orderings" below.
-- **F5:** refresh from the project, after adding, removing or moving effects.
+- **Control+Shift+R:** refresh from the project, after adding, removing or moving effects.
 - **F12:** open the settings list.
 - **Escape:** clear the selection, if there is one. Otherwise, quit.
 
@@ -169,12 +169,12 @@ A container appears like an effect, with "container" after its name. Go into it 
 ## Limitations
 
 - Effects on media items (take FX) aren't included yet.
-- Parameter values are read by the effect's position in the chain. After reordering effects while the script is open, press F5.
+- Parameter values are read by the effect's position in the chain. After reordering effects while the script is open, press Control+Shift+R.
 - Autolabels match whole words only, so "Atk" isn't matched by a branch called "attack". Rename the branch, or the parameter with F2.
 - Filtering and sorting work only on the default branch, not inside your own branches.
 - Unplaced parameters can't be renamed. Place a parameter in a branch to rename it.
 - Branches can't be cut and moved.
-- An effect moved to another track is treated as new: it gets its saved layout again (after F5, when moved outside the script), but loses a filter or sort.
+- An effect moved to another track is treated as new: it gets its saved layout again (after Control+Shift+R, when moved outside the script), but loses a filter or sort.
 
 ## For developers
 

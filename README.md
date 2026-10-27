@@ -146,6 +146,8 @@ Press Control+Tab anywhere inside an effect to open its orderings list. On an ef
 
 F12 opens the settings list. Up and Down move between settings, and Page Up and Page Down change the focused one. F12 or Escape returns you to where you were.
 
+- **REAPER's current track:** follows the script by default. Whenever you move to another track, or into one, it becomes REAPER's last touched track and its only selected track. Leaving the script then finds you on the same track, and so does starting it again. Set it to "left alone" if you'd rather the script didn't change REAPER's track selection.
+
 ## Home and End
 
 On some keyboards, Home sits below End. The "Home and End" setting is swapped by default, for those keyboards. Like the arrow keys, the lower key goes down and the upper key goes up:

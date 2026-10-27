@@ -15,6 +15,13 @@ M.DEFINITIONS = {
     on_text = "swapped, Home goes down",
     off_text = "standard, Home goes up",
   },
+  {
+    key = "follow_track",
+    label = "REAPER's current track",
+    default = true,
+    on_text = "follows the script",
+    off_text = "left alone",
+  },
 }
 
 local by_key = {}

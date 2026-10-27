@@ -147,6 +147,7 @@ reaper = {
   GetToggleCommandState = function() return browser_open and 1 or 0 end,
   Main_OnCommand = function(id)
     if id == 40271 then browser_open = not browser_open end
+    if id == 40914 then touched = selected_track end
   end,
   GetUserInputs = function()
     answer_index = answer_index + 1
@@ -315,6 +316,7 @@ session({
 })
 chains()
 print("Track 2 chain bypassed:", tracks[2].chain_bypassed, "muted:", tracks[2].muted)
+print("Last touched:", touched.name)
 print("Selected:", selected_track and selected_track.name, "browser open:", browser_open)
 
 -- Session 5: the next start lands on Track 3, though Track 2 is current.

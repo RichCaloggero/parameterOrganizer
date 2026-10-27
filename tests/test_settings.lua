@@ -11,6 +11,8 @@ test("settings start at their defaults", function()
   local s = settings_lib.new(memory_store())
   check_equal(s.get("swap_home_end"), true)
   check_equal(s.value_text("swap_home_end"), "swapped, Home goes down")
+  check_equal(s.get("follow_track"), true)
+  check_equal(s.value_text("follow_track"), "follows the script")
 end)
 
 test("stepping a switch turns it off and on, and is saved", function()

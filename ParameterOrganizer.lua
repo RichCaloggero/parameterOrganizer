@@ -1014,6 +1014,23 @@ local function open_fx_browser()
   end
 end
 
+-- REAPER's current (last touched) track follows the track the cursor is
+-- on or inside, so leaving the script, or starting it again, finds the
+-- same place. REAPER can only make a selected track the last touched one,
+-- so the track also becomes the only selected track.
+local LAST_TOUCHED_ACTION = 40914  -- Track: Set first selected track as last touched track
+local followed_guid
+
+local function follow_track()
+  if in_list() or not settings.get("follow_track") then return end
+  local node = tree.focused(cursor)
+  if not (node and node.kind == "track") then node = tree.enclosing(cursor.container, "track") end
+  if not node or node.data.guid == followed_guid then return end
+  followed_guid = node.data.guid
+  reaper.SetOnlyTrackSelected(node.data.track)
+  reaper.Main_OnCommand(LAST_TOUCHED_ACTION, 0)
+end
+
 -- The FX browser has closed: refresh, take focus back, and land on the
 -- first effect it added, or else on the track.
 local function return_from_browser()
@@ -1227,6 +1244,7 @@ local function loop()
       gfx.quit()
       return
     end
+    follow_track()
   end
 
   if browser_watch and reaper.GetToggleCommandState(FX_BROWSER_ACTION) ~= 1 then
@@ -1272,6 +1290,7 @@ local function focus_current_track()
   for _, node in ipairs(organized_root.children) do
     if node.kind == "track" and node.data.guid == guid then
       tree.focus_node(cursor, node)
+      followed_guid = guid
       return
     end
   end
